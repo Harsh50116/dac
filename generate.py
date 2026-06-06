@@ -124,6 +124,13 @@ EFFECTS_CONFIG = {
         "adventure awaits":        {"peak_month": 12, "sigma": 4, "peak_mult": 1.35},
     },
 
+    # --- Label type sampling probabilities (independent per ad) ---
+    "label_type_probs": {
+        "Noun": 0.70,
+        "Verb": 0.50,
+        "Phrase": 0.40,
+    },
+
     # --- Volume shaping (Dirichlet alpha — lower = spikier) ---
     "volume_alpha": 0.15,
 }
@@ -151,3 +158,63 @@ def generate_monthly_counts(n_ads, months, rng):
     top_indices = np.argsort(fractional)[-remainder:]
     counts[top_indices] += 1
     return dict(zip(months, counts))
+
+
+# =============================================================================
+# STEP 3 — Attribute sampling
+# =============================================================================
+
+def sample_attributes(monthly_counts, rng):
+    """Sample per-ad attributes based on config probabilities."""
+    probs = EFFECTS_CONFIG["attribute_probs"]
+    cat_weights = EFFECTS_CONFIG["category_weights"]
+    label_probs = EFFECTS_CONFIG["label_type_probs"]
+    phrases = list(EFFECTS_CONFIG["phrases"].keys())
+
+    categories = list(cat_weights.keys())
+    cat_probs = np.array(list(cat_weights.values()))
+    cat_probs = cat_probs / cat_probs.sum()
+
+    media_types = list(probs["media_type"].keys())
+    media_probs = np.array(list(probs["media_type"].values()))
+
+    aspect_types = list(probs["aspect_ratio"].keys())
+    aspect_probs = np.array(list(probs["aspect_ratio"].values()))
+
+    rows = []
+    ad_counter = 0
+    for month, count in monthly_counts.items():
+        for _ in range(count):
+            media = rng.choice(media_types, p=media_probs)
+            aspect = rng.choice(aspect_types, p=aspect_probs)
+            category = rng.choice(categories, p=cat_probs)
+            hl_numbers = bool(rng.random() < probs["headline_has_numbers"])
+            bd_numbers = bool(rng.random() < probs["body_has_numbers"])
+            bd_emoji = bool(rng.random() < probs["body_has_emoji"])
+            bd_long = bool(rng.random() < probs["body_long"])
+
+            label_types = ["Image"] if media == "image" else ["Video"]
+            for ltype, lprob in label_probs.items():
+                if rng.random() < lprob:
+                    label_types.append(ltype)
+
+            assigned_phrase = None
+            if "Phrase" in label_types:
+                assigned_phrase = rng.choice(phrases)
+
+            rows.append({
+                "ad_id": f"ad_{ad_counter:05d}",
+                "date": month,
+                "media_type": media,
+                "aspect_ratio": aspect,
+                "category": category,
+                "headline_has_numbers": hl_numbers,
+                "body_has_numbers": bd_numbers,
+                "body_has_emoji": bd_emoji,
+                "body_long": bd_long,
+                "label_types": label_types,
+                "assigned_phrase": assigned_phrase,
+            })
+            ad_counter += 1
+
+    return pd.DataFrame(rows)
