@@ -10,9 +10,9 @@ import pandas as pd
 
 EFFECTS_CONFIG = {
     # --- Base KPI values ---
-    "base_roas": 3.0,
-    "base_ctr": 0.008,
-    "base_conv_rate": 0.020,
+    "base_roas": 2.01,
+    "base_ctr": 0.00655,
+    "base_conv_rate": 0.01719,
 
     # --- Noise (lognormal sigma) ---
     "noise_sigma": 0.10,
@@ -141,7 +141,7 @@ EFFECTS_CONFIG = {
 # =============================================================================
 
 def generate_month_list(start, end):
-    """Return list of YYYY-MM strings from start (inclusive) to end (exclusive)."""
+    """Return list of YYYY-MM strings from start (inclusive) to end (inclusive)."""
     months = pd.date_range(start, end, freq="MS", inclusive="both")
     return [m.strftime("%Y-%m") for m in months]
 
@@ -218,3 +218,224 @@ def sample_attributes(monthly_counts, rng):
             ad_counter += 1
 
     return pd.DataFrame(rows)
+
+
+# =============================================================================
+# STEP 4 — Forward effect model (KPIs)
+# =============================================================================
+
+def category_temporal_effect(category, month_index):
+    """Sine-wave multiplier for a category at a given month index."""
+    cfg = EFFECTS_CONFIG["categories"][category]
+    angle = 2 * np.pi * month_index / cfg["period"] + cfg["phase"]
+    return cfg["base"] + cfg["amplitude"] * np.sin(angle)
+
+
+def phrase_temporal_effect(phrase, month_index):
+    """Gaussian bump multiplier for a phrase at a given month index."""
+    cfg = EFFECTS_CONFIG["phrases"][phrase]
+    decay = np.exp(-0.5 * ((month_index - cfg["peak_month"]) / cfg["sigma"]) ** 2)
+    return 1.0 + (cfg["peak_mult"] - 1.0) * decay
+
+
+def compute_kpi_multiplier(row, month_index, effect_key):
+    """Compute the combined multiplier for one KPI (roas/ctr/conv_rate)."""
+    effects = EFFECTS_CONFIG[f"{effect_key}_effects"]
+
+    mult = 1.0
+    mult *= effects["media_type"][row["media_type"]]
+    mult *= effects["aspect_ratio"][row["aspect_ratio"]]
+    mult *= effects["headline_has_numbers"] if row["headline_has_numbers"] else 1.0
+    mult *= effects["body_has_numbers"] if row["body_has_numbers"] else 1.0
+    mult *= effects["body_has_emoji"] if row["body_has_emoji"] else 1.0
+    mult *= effects["body_long"] if row["body_long"] else 1.0
+
+    for ltype in row["label_types"]:
+        mult *= effects["label_type"][ltype]
+
+    mult *= category_temporal_effect(row["category"], month_index)
+    if row["assigned_phrase"]:
+        mult *= phrase_temporal_effect(row["assigned_phrase"], month_index)
+
+    mult *= EFFECTS_CONFIG["seasonal"][int(row["date"].split("-")[1])]
+
+    return mult
+
+
+def apply_effect_model(df, rng, start_date="2023-01"):
+    """Apply the forward effect model to compute KPIs for each ad."""
+    start_month = int(start_date.split("-")[0]) * 12 + int(start_date.split("-")[1])
+    sigma = EFFECTS_CONFIG["noise_sigma"]
+
+    roas_list, ctr_list, conv_list = [], [], []
+    for _, row in df.iterrows():
+        ad_month = int(row["date"].split("-")[0]) * 12 + int(row["date"].split("-")[1])
+        month_index = ad_month - start_month
+
+        roas_mult = compute_kpi_multiplier(row, month_index, "roas")
+        ctr_mult = compute_kpi_multiplier(row, month_index, "ctr")
+        conv_mult = compute_kpi_multiplier(row, month_index, "conv_rate")
+
+        noise_r = rng.lognormal(0, sigma)
+        noise_c = rng.lognormal(0, sigma)
+        noise_v = rng.lognormal(0, sigma)
+
+        roas_list.append(EFFECTS_CONFIG["base_roas"] * roas_mult * noise_r)
+        ctr_list.append(EFFECTS_CONFIG["base_ctr"] * ctr_mult * noise_c)
+        conv_list.append(EFFECTS_CONFIG["base_conv_rate"] * conv_mult * noise_v)
+
+    df["roas"] = roas_list
+    df["ctr"] = ctr_list
+    df["conv_rate"] = conv_list
+    return df
+
+
+# =============================================================================
+# STEP 5 — Back out raw metrics
+# =============================================================================
+
+def compute_raw_metrics(df, rng):
+    """Derive spend, revenue, impressions, clicks, purchases from KPIs."""
+    cfg = EFFECTS_CONFIG
+    n = len(df)
+
+    spend_mu = np.log(cfg["spend_mean"]) - 0.5 * cfg["spend_sigma"] ** 2
+    df["spend"] = rng.lognormal(spend_mu, cfg["spend_sigma"], n).round(2)
+
+    imp_mu = np.log(cfg["impressions_mean"]) - 0.5 * cfg["impressions_sigma"] ** 2
+    df["impressions"] = rng.lognormal(imp_mu, cfg["impressions_sigma"], n).astype(int)
+
+    df["revenue"] = (df["spend"] * df["roas"]).round(2)
+    df["clicks"] = (df["impressions"] * df["ctr"]).astype(int)
+    df["purchases"] = (df["clicks"] * df["conv_rate"]).astype(int)
+
+    return df
+
+
+# =============================================================================
+# STEP 6 — Copy text generation
+# =============================================================================
+
+NOUNS = [
+    "jersey", "bibs", "jacket", "gloves", "socks", "vest", "shorts",
+    "tights", "cap", "wardrobe", "kit", "baselayer", "shell", "armwarmers",
+]
+
+VERBS = [
+    "ride", "climb", "train", "race", "gear", "explore", "conquer",
+    "push", "pedal", "layer", "sprint", "cruise", "descend", "shred",
+]
+
+EMOJI_POOL = ["🚴", "⛰️", "🔥", "💪", "🏔️", "☀️", "❄️", "🌧️"]
+
+HEADLINE_TEMPLATES = [
+    "{noun} for every {verb}",
+    "new {noun} collection",
+    "{verb} further in our {noun}",
+    "premium {noun} built to {verb}",
+    "the {noun} you need to {verb}",
+]
+
+# Short templates: ≤ 35 chars with longest noun/verb, leaving room for number + emoji
+BODY_TEMPLATES_SHORT = [
+    "Our {noun} lets you {verb} better.",
+    "Built to {verb}. Premium {noun}.",
+    "{verb} further in our new {noun}.",
+    "Ride ready. Try our {noun} today.",
+]
+
+# Long templates: > 55 chars guaranteed, so always > 50 even after substitution
+BODY_TEMPLATES_LONG = [
+    "Engineered for performance on every terrain. Our {noun} is designed to help you {verb} with total confidence, whether you are on a mountain pass or a city commute through changing weather.",
+    "Built for the long haul. Our premium {noun} combines technical fabrics with a refined fit so you can {verb} harder and go further, no matter what the forecast brings this season.",
+    "Lightweight and breathable, this {noun} keeps you comfortable from the first pedal stroke to the last. Designed for riders who {verb} in all conditions and demand the very best from their gear.",
+]
+
+
+def _insert_number(text, rng):
+    words = text.split()
+    pos = rng.integers(0, max(len(words) - 1, 1))
+    num = str(rng.integers(2, 30))
+    words.insert(pos, num)
+    return " ".join(words)
+
+
+def generate_copy(df, rng):
+    """Generate headline, body, and labels column consistent with sampled flags."""
+    threshold = EFFECTS_CONFIG["body_long_threshold"]
+    headlines, bodies, labels_col = [], [], []
+
+    for _, row in df.iterrows():
+        noun = rng.choice(NOUNS)
+        verb = rng.choice(VERBS)
+
+        hl = rng.choice(HEADLINE_TEMPLATES).format(noun=noun, verb=verb)
+        if row["headline_has_numbers"]:
+            hl = _insert_number(hl, rng)
+
+        if row["body_long"]:
+            body = rng.choice(BODY_TEMPLATES_LONG).format(noun=noun, verb=verb)
+        else:
+            body = rng.choice(BODY_TEMPLATES_SHORT).format(noun=noun, verb=verb)
+
+        if row["body_has_numbers"]:
+            body = _insert_number(body, rng)
+
+        if row["body_has_emoji"]:
+            body = body + " " + rng.choice(EMOJI_POOL)
+
+        label_parts = []
+        media_label = "img_" + noun if row["media_type"] == "image" else "vid_" + noun
+        label_parts.append(f"{media_label}:{'Image' if row['media_type'] == 'image' else 'Video'}")
+
+        if "Noun" in row["label_types"]:
+            label_parts.append(f"{noun}:Noun")
+        if "Verb" in row["label_types"]:
+            label_parts.append(f"{verb}:Verb")
+        if "Phrase" in row["label_types"] and row["assigned_phrase"]:
+            label_parts.append(f"{row['assigned_phrase']}:Phrase")
+
+        headlines.append(hl)
+        bodies.append(body)
+        labels_col.append("|".join(label_parts))
+
+    df["headline"] = headlines
+    df["body"] = bodies
+    df["labels"] = labels_col
+    return df
+
+
+# =============================================================================
+# STEP 7 — CSV assembly & export
+# =============================================================================
+
+OUTPUT_COLUMNS = [
+    "ad_id", "date", "spend", "revenue", "impressions", "clicks",
+    "purchases", "headline", "body", "media_type", "aspect_ratio",
+    "category", "labels",
+]
+
+
+def generate(n_ads, start, end, seed, out):
+    """Full pipeline: sample → effect model → raw metrics → copy → CSV."""
+    rng = np.random.default_rng(seed)
+    months = generate_month_list(start, end)
+    counts = generate_monthly_counts(n_ads, months, rng)
+    df = sample_attributes(counts, rng)
+    df = apply_effect_model(df, rng, start_date=start)
+    df = compute_raw_metrics(df, rng)
+    df = generate_copy(df, rng)
+    df[OUTPUT_COLUMNS].to_csv(out, index=False)
+    print(f"Wrote {len(df)} ads to {out}")
+    return df
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Generate synthetic ad data")
+    parser.add_argument("--n-ads", type=int, default=2650)
+    parser.add_argument("--start", default="2023-01")
+    parser.add_argument("--end", default="2025-01")
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--out", default="ads.csv")
+    args = parser.parse_args()
+    generate(args.n_ads, args.start, args.end, args.seed, args.out)
