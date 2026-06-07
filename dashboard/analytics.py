@@ -189,6 +189,57 @@ def rolling_label_lift(
     return result
 
 
+def label_performance_over_time(
+    data: pd.DataFrame,
+    tokens: tuple[str, ...],
+    kpi: str,
+    frequency: str = "quarter",
+    label_types: tuple[str, ...] = (),
+) -> pd.DataFrame:
+    """Return label volume and lift for every month or quarter."""
+    if frequency not in {"month", "quarter"}:
+        raise ValueError("frequency must be 'month' or 'quarter'")
+
+    period_frequency = "M" if frequency == "month" else "Q"
+    periods = calendar_months(data).to_period(period_frequency).unique()
+    period_values = data["date"].dt.to_period(period_frequency)
+    results = []
+    for period in periods:
+        group = data.loc[period_values.eq(period)]
+        present = group["label_pairs"].map(
+            lambda labels: any(
+                token in tokens
+                and (not label_types or label_type in label_types)
+                for token, label_type in labels
+            )
+        )
+        results.append(
+            {
+                "period": period,
+                "ads": int(present.sum()),
+                "lift": lift(group, present, kpi) if not group.empty else np.nan,
+            }
+        )
+    return pd.DataFrame(results)
+
+
+def rows_with_labels(
+    data: pd.DataFrame,
+    tokens: tuple[str, ...],
+    label_types: tuple[str, ...] = (),
+) -> pd.DataFrame:
+    """Return rows containing any selected token/type pair."""
+    if not tokens:
+        return data.copy()
+    present = data["label_pairs"].map(
+        lambda labels: any(
+            token in tokens and (not label_types or label_type in label_types)
+            for token, label_type in labels
+        )
+    )
+    return data.loc[present].copy()
+
+
 def _normalize_kpi(kpi: str) -> str:
     name = kpi.upper()
     if name not in KPI_NAMES:

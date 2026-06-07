@@ -12,9 +12,11 @@ from dashboard.analytics import (
     kpi_summary,
     label_table,
     label_type_table,
+    label_performance_over_time,
     lift,
     monthly_performance,
     rolling_label_lift,
+    rows_with_labels,
 )
 from dashboard.data import load_dataset
 
@@ -122,6 +124,30 @@ class AnalyticsTests(unittest.TestCase):
         self.assertEqual(str(result.iloc[0]["period"]), "2023Q1")
         self.assertEqual(str(result.iloc[-1]["period"]), "2025Q1")
         self.assertIn("rolling_lift", result)
+
+    def test_label_performance_and_row_filtering(self):
+        filtered = rows_with_labels(
+            self.data,
+            ("adventure awaits",),
+            ("Phrase",),
+        )
+        performance = label_performance_over_time(
+            self.data,
+            ("adventure awaits",),
+            "ROAS",
+            frequency="quarter",
+            label_types=("Phrase",),
+        )
+
+        self.assertGreater(len(filtered), 0)
+        self.assertTrue(
+            filtered["label_tokens"].map(
+                lambda labels: "adventure awaits" in labels
+            ).all()
+        )
+        self.assertEqual(len(performance), 9)
+        self.assertIn("ads", performance)
+        self.assertIn("lift", performance)
 
 
 if __name__ == "__main__":
