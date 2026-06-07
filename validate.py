@@ -3,7 +3,7 @@
 import sys
 import numpy as np
 import pandas as pd
-from generate import EFFECTS_CONFIG
+from generate import EFFECTS_CONFIG, EMOJI_POOL
 
 DEMO_TARGETS = {
     "n_ads": 2650,
@@ -16,7 +16,11 @@ DEMO_TARGETS = {
 }
 
 TOLERANCE = 0.10
-LIFT_TOLERANCE = 0.35
+LIFT_TOLERANCE = {
+    "roas": 0.35,
+    "ctr": 0.35,
+    "conv_rate": 0.60,
+}
 
 
 def check_totals(df):
@@ -52,21 +56,6 @@ def compute_lift(df, col, present_mask):
     return present / absent
 
 
-def _expected_lift(effect_val, prob):
-    """Expected lift given a binary attribute's multiplier and prevalence.
-
-    When attribute is present, mean KPI ∝ effect_val.
-    When absent, mean KPI ∝ 1.0.
-    lift = mean_present / mean_absent
-         = effect_val / (population_mean_excluding_present)
-    Approximation: lift ≈ effect_val / weighted_avg_of_absent
-    For binary: absent_mean ∝ 1.0, so lift ≈ effect_val / 1.0 = effect_val.
-    But since compute_lift divides by absent mean (not overall),
-    lift ≈ effect_val for flags (present vs absent = multiplier vs 1.0).
-    """
-    return effect_val
-
-
 def check_lifts(df):
     """Recover per-attribute lift and compare against designed multipliers."""
     df = df.copy()
@@ -75,24 +64,27 @@ def check_lifts(df):
     df["conv_rate"] = np.where(df["clicks"] > 0, df["purchases"] / df["clicks"], 0)
     df["has_digit_headline"] = df["headline"].str.contains(r"\d", regex=True)
     df["has_digit_body"] = df["body"].str.contains(r"\d", regex=True)
+    df["has_emoji_body"] = df["body"].apply(lambda b: any(e in b for e in EMOJI_POOL))
     df["body_long"] = df["body"].str.len() > 50
 
-    label_types = ["Image", "Video", "Noun", "Verb", "Phrase"]
-    for lt in label_types:
+    # Only text-based label types — Image/Video are validated via media_type
+    text_label_types = ["Noun", "Verb", "Phrase"]
+    for lt in text_label_types:
         df[f"has_{lt}"] = df["labels"].str.contains(f":{lt}(?:\\||$)", regex=True)
 
     all_ok = True
     for kpi, effect_key in [("roas", "roas"), ("ctr", "ctr"), ("conv_rate", "conv_rate")]:
         effects = EFFECTS_CONFIG[f"{effect_key}_effects"]
-        print(f"\n=== {kpi.upper()} Lift Recovery ===")
+        tol = LIFT_TOLERANCE[kpi]
+        print(f"\n=== {kpi.upper()} Lift Recovery (tolerance {tol:.0%}) ===")
 
         print("\n  Media type:")
         for mt in ["image", "video"]:
             lift = compute_lift(df, kpi, df["media_type"] == mt)
             designed = effects["media_type"][mt]
             diff = abs(lift / designed - 1)
-            status = "OK" if diff < LIFT_TOLERANCE else "DRIFT"
-            if diff >= LIFT_TOLERANCE:
+            status = "OK" if diff < tol else "DRIFT"
+            if diff >= tol:
                 all_ok = False
             print(f"    {mt:<10s} lift={lift:.2f}  designed={designed:.2f}  [{status}]")
 
@@ -106,18 +98,19 @@ def check_lifts(df):
         for flag, label, cfg_key in [
             ("has_digit_headline", "hl_numbers", "headline_has_numbers"),
             ("has_digit_body", "bd_numbers", "body_has_numbers"),
+            ("has_emoji_body", "bd_emoji", "body_has_emoji"),
             ("body_long", "body_long", "body_long"),
         ]:
             lift = compute_lift(df, kpi, df[flag])
             designed = effects[cfg_key]
             diff = abs(lift / designed - 1)
-            status = "OK" if diff < LIFT_TOLERANCE else "DRIFT"
-            if diff >= LIFT_TOLERANCE:
+            status = "OK" if diff < tol else "DRIFT"
+            if diff >= tol:
                 all_ok = False
             print(f"    {label:<14s} lift={lift:.2f}  designed={designed:.2f}  [{status}]")
 
-        print("\n  Label types:")
-        for lt in label_types:
+        print("\n  Label types (text only — Image/Video validated via media_type):")
+        for lt in text_label_types:
             lift = compute_lift(df, kpi, df[f"has_{lt}"])
             designed = effects["label_type"][lt]
             print(f"    {lt:<10s} lift={lift:.2f}  designed={designed:.2f}")

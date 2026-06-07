@@ -12,7 +12,7 @@ EFFECTS_CONFIG = {
     # --- Base KPI values ---
     "base_roas": 2.01,
     "base_ctr": 0.00655,
-    "base_conv_rate": 0.01719,
+    "base_conv_rate": 0.01412,
 
     # --- Noise (lognormal sigma) ---
     "noise_sigma": 0.10,
@@ -303,11 +303,11 @@ def compute_raw_metrics(df, rng):
     df["spend"] = rng.lognormal(spend_mu, cfg["spend_sigma"], n).round(2)
 
     imp_mu = np.log(cfg["impressions_mean"]) - 0.5 * cfg["impressions_sigma"] ** 2
-    df["impressions"] = rng.lognormal(imp_mu, cfg["impressions_sigma"], n).astype(int)
+    df["impressions"] = np.round(rng.lognormal(imp_mu, cfg["impressions_sigma"], n)).astype(int)
 
     df["revenue"] = (df["spend"] * df["roas"]).round(2)
-    df["clicks"] = (df["impressions"] * df["ctr"]).astype(int)
-    df["purchases"] = (df["clicks"] * df["conv_rate"]).astype(int)
+    df["clicks"] = np.round(df["impressions"] * df["ctr"]).astype(int)
+    df["purchases"] = np.round(df["clicks"] * df["conv_rate"]).astype(int)
 
     return df
 
