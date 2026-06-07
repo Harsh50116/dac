@@ -1,0 +1,16 @@
+temp/
+CLAUDE.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Generated output
+*.csv
+
+# OS
+.DS_Store
