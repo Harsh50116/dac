@@ -1,5 +1,7 @@
 """Plotly chart builders for the Phase 1 Overview."""
 
+import math
+
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -12,6 +14,22 @@ GRID = "rgba(148, 163, 184, 0.14)"
 TEXT = "#cbd5e1"
 RED = "#e5533f"
 FONT = "Arial, sans-serif"
+
+
+def _lift_color(value: float) -> str:
+    stops = [
+        (-50, (229, 72, 77)), (-15, (240, 138, 60)), (0, (227, 179, 65)),
+        (18, (123, 200, 108)), (45, (47, 179, 68)),
+    ]
+    v = max(-50, min(45, value))
+    for i in range(len(stops) - 1):
+        a, ca = stops[i]
+        b, cb = stops[i + 1]
+        if a <= v <= b:
+            t = (v - a) / (b - a)
+            c = tuple(round(ca[j] + (cb[j] - ca[j]) * t) for j in range(3))
+            return f"rgb({c[0]},{c[1]},{c[2]})"
+    return "rgb(227,179,65)"
 
 
 def volume_performance_chart(
@@ -101,7 +119,7 @@ def lift_bar_chart(
     height: int = 320,
 ) -> go.Figure:
     """Build a categorical lift bar chart."""
-    colors = [GREEN if value >= 0 else RED for value in data["lift"]]
+    colors = [_lift_color(value) for value in data["lift"]]
     figure = go.Figure(
         go.Bar(
             x=data[label_column],
@@ -125,15 +143,18 @@ def lift_bar_chart(
 
 def circular_lift_chart(data: pd.DataFrame) -> go.Figure:
     """Build a polar lift chart with compact token labels."""
-    colors = [GREEN if value >= 0 else RED for value in data["lift"]]
+    colors = [_lift_color(value) for value in data["lift"]]
+    n = len(data)
+    step = 1 if n <= 30 else 2 if n <= 44 else 3
+    tokens = [t[:12] + "…" if len(t) > 13 else t for t in data["token"]]
     figure = go.Figure(
         go.Barpolar(
             r=data["lift"].abs(),
-            theta=data["token"],
+            theta=tokens,
             marker_color=colors,
-            customdata=data[["label_type", "ads", "lift"]],
+            customdata=data[["label_type", "ads", "lift", "token"]],
             hovertemplate=(
-                "%{theta}<br>Type: %{customdata[0]}"
+                "%{customdata[3]}<br>Type: %{customdata[0]}"
                 "<br>Lift: %{customdata[2]:+.1f}%"
                 "<br>Ads: %{customdata[1]:,}<extra></extra>"
             ),
@@ -154,7 +175,12 @@ def circular_lift_chart(data: pd.DataFrame) -> go.Figure:
             "bgcolor": "rgba(0,0,0,0)",
             "angularaxis": {
                 "gridcolor": GRID,
-                "tickfont": {"size": 10},
+                "tickfont": {"size": 9.5},
+                "tickvals": tokens,
+                "ticktext": [
+                    t if i % step == 0 else ""
+                    for i, t in enumerate(tokens)
+                ],
             },
             "radialaxis": {
                 "gridcolor": GRID,
@@ -172,11 +198,12 @@ def word_cloud_chart(data: pd.DataFrame) -> go.Figure:
     minimum = data["ads"].min()
     maximum = data["ads"].max()
     spread = maximum - minimum or 1
-    sizes = 14 + (data["ads"] - minimum) / spread * 28
-    colors = [GREEN if value >= 0 else RED for value in data["lift"]]
-    positions = range(len(data))
-    x = [((index * 7) % 11) - 5 for index in positions]
-    y = [((index * 5) % 9) - 4 for index in positions]
+    sizes = 13 + (data["ads"] - minimum) / spread * 33
+    colors = [_lift_color(value) for value in data["lift"]]
+    n = len(data)
+    golden = 2.3998277
+    x = [math.sqrt(i + 0.5) * 0.8 * math.cos(i * golden) for i in range(n)]
+    y = [math.sqrt(i + 0.5) * 0.8 * math.sin(i * golden) for i in range(n)]
     figure = go.Figure(
         go.Scatter(
             x=x,
@@ -207,6 +234,44 @@ def word_cloud_chart(data: pd.DataFrame) -> go.Figure:
         yaxis={"visible": False},
     )
     return figure
+
+
+def sparkline_svg(
+    data: list[float],
+    color: str = GREEN,
+    width: int = 120,
+    height: int = 28,
+    idx: int = 0,
+) -> str:
+    """Return a minimal SVG area sparkline for KPI cards."""
+    vals = [v for v in data if v is not None and pd.notna(v)]
+    if len(vals) < 2:
+        return ""
+    mn, mx = min(vals), max(vals)
+    rng = mx - mn or 1
+    pts = []
+    for i, v in enumerate(data):
+        xp = i / (len(data) - 1) * width
+        safe = v if (v is not None and pd.notna(v)) else mn
+        yp = height - 3 - (safe - mn) / rng * (height - 6)
+        pts.append((xp, yp))
+    line = " ".join(
+        f"{'M' if i == 0 else 'L'}{p[0]:.1f} {p[1]:.1f}"
+        for i, p in enumerate(pts)
+    )
+    area = f"{line} L{width} {height} L0 {height} Z"
+    gid = f"sp{idx}"
+    return (
+        f'<svg width="100%" height="28" viewBox="0 0 {width} {height}"'
+        f' preserveAspectRatio="none" style="display:block">'
+        f'<defs><linearGradient id="{gid}" x1="0" y1="0" x2="0" y2="1">'
+        f'<stop offset="0" stop-color="{color}" stop-opacity="0.22"/>'
+        f'<stop offset="1" stop-color="{color}" stop-opacity="0"/>'
+        f'</linearGradient></defs>'
+        f'<path d="{area}" fill="url(#{gid})"/>'
+        f'<path d="{line}" fill="none" stroke="{color}" stroke-width="1.6"/>'
+        f'</svg>'
+    )
 
 
 def _apply_layout(figure: go.Figure, x_title: str) -> None:

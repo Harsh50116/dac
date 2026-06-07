@@ -23,6 +23,7 @@ from dashboard.charts import (
     label_performance_chart,
     lift_bar_chart,
     rolling_lift_chart,
+    sparkline_svg,
     volume_performance_chart,
     word_cloud_chart,
 )
@@ -174,21 +175,40 @@ def render_global_controls(data: pd.DataFrame) -> pd.DataFrame:
     return filtered
 
 
+def _month_over_month_delta(values: list[float]) -> float:
+    clean = [v for v in values if v is not None and pd.notna(v) and v != 0]
+    if len(clean) < 2:
+        return 0.0
+    last, prev = clean[-1], clean[-2]
+    return (last - prev) / abs(prev) * 100 if prev else 0.0
+
+
 def render_kpi_cards(data: pd.DataFrame) -> None:
-    """Render the seven Overview headline values."""
+    """Render the seven Overview headline values with deltas and sparklines."""
     summary = kpi_summary(data)
-    columns = st.columns(7)
-    values = (
-        ("No. of Ads", f"{summary['ads']:,}"),
-        ("Total Amount Spent", f"${summary['spend']:,.0f}"),
-        ("Total Revenue", f"${summary['revenue']:,.0f}"),
-        ("Total Impressions", f"{summary['impressions']:,.0f}"),
-        ("Total Clicks", f"{summary['clicks']:,.0f}"),
-        ("Total Purchases", f"{summary['purchases']:,.0f}"),
-        ("Total ROAS", f"{summary['roas']:.2f}"),
+    monthly = monthly_performance(data)
+    cards = (
+        ("No. of Ads", f"{summary['ads']:,}", monthly["ads"]),
+        ("Total Amount Spent", f"${summary['spend']:,.0f}", monthly["spend"]),
+        ("Total Revenue", f"${summary['revenue']:,.0f}", monthly["revenue"]),
+        ("Total Impressions", f"{summary['impressions']:,.0f}", monthly["impressions"]),
+        ("Total Clicks", f"{summary['clicks']:,.0f}", monthly["clicks"]),
+        ("Total Purchases", f"{summary['purchases']:,.0f}", monthly["purchases"]),
+        ("Total ROAS", f"{summary['roas']:.2f}", monthly["roas"]),
     )
-    for column, (label, value) in zip(columns, values):
-        column.metric(label, value)
+    columns = st.columns(7)
+    for i, (column, (label, value, series)) in enumerate(zip(columns, cards)):
+        spark_values = series.tolist()
+        delta = _month_over_month_delta(spark_values)
+        up = delta >= 0
+        color = "#34c77b" if up else "#e5533f"
+        with column:
+            st.metric(label, value, delta=f"{delta:+.1f}%")
+            st.markdown(
+                f'<div class="sparkline-wrap">'
+                f"{sparkline_svg(spark_values, color, idx=i)}</div>",
+                unsafe_allow_html=True,
+            )
 
 
 def label_options(data: pd.DataFrame, label_types: list[str]) -> list[str]:

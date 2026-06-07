@@ -80,6 +80,11 @@ h3 {
   font-weight: 700;
 }
 
+.sparkline-wrap {
+  margin-top: -0.6rem;
+  line-height: 0;
+}
+
 [data-testid="stExpander"] {
   overflow: hidden;
   background: rgba(16, 19, 25, 0.72);
@@ -89,6 +94,10 @@ h3 {
 
 [data-testid="stExpander"] summary {
   font-weight: 700;
+}
+
+[data-testid="stExpanderDetails"] {
+  min-height: 5.5rem;
 }
 
 [data-testid="stPlotlyChart"] {
