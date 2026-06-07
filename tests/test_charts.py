@@ -4,14 +4,20 @@ import unittest
 from pathlib import Path
 
 from dashboard.analytics import (
+    binary_lift_table,
+    categorical_lift_table,
+    label_table,
     label_performance_over_time,
     monthly_performance,
     rolling_label_lift,
 )
 from dashboard.charts import (
+    circular_lift_chart,
     label_performance_chart,
+    lift_bar_chart,
     rolling_lift_chart,
     volume_performance_chart,
+    word_cloud_chart,
 )
 from dashboard.data import load_dataset
 
@@ -71,6 +77,24 @@ class OverviewChartTests(unittest.TestCase):
         self.assertEqual(len(figure.data), 2)
         self.assertEqual(figure.data[0].name, "# of Ads (present)")
         self.assertEqual(figure.data[1].name, "Label Lift (%)")
+
+    def test_details_chart_builders(self):
+        aspect = categorical_lift_table(
+            self.data,
+            "aspect_ratio",
+            "ROAS",
+        )
+        binary = binary_lift_table(
+            self.data,
+            "headline_has_numbers",
+            "ROAS",
+        )
+        labels = label_table(self.data, "ROAS", min_ads=8).head(20)
+
+        self.assertEqual(lift_bar_chart(aspect, "value").data[0].type, "bar")
+        self.assertEqual(lift_bar_chart(binary, "value").data[0].type, "bar")
+        self.assertEqual(circular_lift_chart(labels).data[0].type, "barpolar")
+        self.assertEqual(word_cloud_chart(labels).data[0].mode, "text")
 
 
 if __name__ == "__main__":

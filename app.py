@@ -7,20 +7,27 @@ import streamlit as st
 
 from dashboard.analytics import (
     KPI_NAMES,
+    binary_lift_table,
+    categorical_lift_table,
     filter_data,
     kpi_summary,
     label_performance_over_time,
     label_table,
+    label_type_table,
     monthly_performance,
     rolling_label_lift,
     rows_with_labels,
 )
 from dashboard.charts import (
+    circular_lift_chart,
     label_performance_chart,
+    lift_bar_chart,
     rolling_lift_chart,
     volume_performance_chart,
+    word_cloud_chart,
 )
 from dashboard.data import DataValidationError, calendar_months, load_dataset
+from dashboard.styles import apply_styles
 
 
 SAMPLE_DATA = (
@@ -363,6 +370,126 @@ def render_overview(data: pd.DataFrame, kpi: str) -> None:
     render_label_performance_chart(data, kpi)
 
 
+def render_label_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
+    """Render label-type, circular-lift, and word-cloud charts."""
+    st.subheader("Lift by Label Type")
+    st.caption(f"{kpi} lift versus ads without each label type")
+    st.plotly_chart(
+        lift_bar_chart(label_type_table(data, kpi), "label_type"),
+        width="stretch",
+    )
+
+    circular, cloud = st.columns(2)
+    with circular:
+        st.subheader("Circular Lift by Label")
+        st.caption(f"Strongest {top_n} token lifts")
+        with st.expander("Controls", expanded=True):
+            circular_types = st.multiselect(
+                "Label type(s)",
+                LABEL_TYPES,
+                default=["Noun", "Verb"],
+                key="circular_label_types",
+            )
+        circular_data = label_table(
+            data,
+            kpi,
+            label_types=tuple(circular_types),
+            min_ads=8,
+        )
+        circular_data = (
+            circular_data.assign(strength=circular_data["lift"].abs())
+            .sort_values("strength", ascending=False)
+            .head(top_n)
+        )
+        st.plotly_chart(
+            circular_lift_chart(circular_data),
+            width="stretch",
+        )
+
+    with cloud:
+        st.subheader("Word Cloud")
+        st.caption("Size = frequency · color = lift")
+        with st.expander("Controls", expanded=True):
+            cloud_types = st.multiselect(
+                "Label type(s)",
+                LABEL_TYPES,
+                default=["Noun", "Verb", "Phrase"],
+                key="cloud_label_types",
+            )
+        cloud_data = (
+            label_table(
+                data,
+                kpi,
+                label_types=tuple(cloud_types),
+                min_ads=1,
+            )
+            .sort_values("ads", ascending=False)
+            .head(44)
+        )
+        st.plotly_chart(word_cloud_chart(cloud_data), width="stretch")
+
+
+def render_copy_details(data: pd.DataFrame, kpi: str) -> None:
+    """Render visual-format and structural-copy comparisons."""
+    st.subheader("Ad Copy / Headline Charts")
+    first, second = st.columns(2)
+    with first:
+        st.markdown("#### Visual Asset Aspect Ratio Performance")
+        aspect = categorical_lift_table(
+            data,
+            "aspect_ratio",
+            kpi,
+            order=("1:1", "4:5", "9:16"),
+        )
+        st.plotly_chart(lift_bar_chart(aspect, "value"), width="stretch")
+    with second:
+        st.markdown("#### Punctuation Performance")
+        if data["has_punctuation"].nunique() < 2:
+            st.info(
+                "Unavailable: the current dataset has no ads containing "
+                "headline or body punctuation (! or ?)."
+            )
+        else:
+            punctuation = binary_lift_table(data, "has_punctuation", kpi)
+            st.plotly_chart(
+                lift_bar_chart(punctuation, "value"),
+                width="stretch",
+            )
+
+    comparisons = (
+        ("Body Text Over 50?", "body_over_50"),
+        ("Body Has Emojis?", "body_has_emoji"),
+        ("Headline Has Numbers?", "headline_has_numbers"),
+        ("Body Has Numbers?", "body_has_numbers"),
+    )
+    for index in range(0, len(comparisons), 2):
+        columns = st.columns(2)
+        for column, (title, feature) in zip(
+            columns,
+            comparisons[index : index + 2],
+        ):
+            with column:
+                st.markdown(f"#### {title}")
+                st.plotly_chart(
+                    lift_bar_chart(
+                        binary_lift_table(data, feature, kpi),
+                        "value",
+                        height=290,
+                    ),
+                    width="stretch",
+                )
+
+
+def render_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
+    """Render the complete Phase 1 Details tab."""
+    if data.empty:
+        st.warning("No ads match the selected global filters.")
+        return
+    render_label_details(data, kpi, top_n)
+    st.divider()
+    render_copy_details(data, kpi)
+
+
 def render_loaded_state(data: pd.DataFrame) -> None:
     """Render the loaded-file header and global controls."""
     header, action = st.columns([5, 1])
@@ -383,7 +510,11 @@ def render_loaded_state(data: pd.DataFrame) -> None:
     with overview:
         render_overview(filtered, st.session_state["active_kpi"])
     with details:
-        st.info("Details charts will be added in Step 6.")
+        render_details(
+            filtered,
+            st.session_state["active_kpi"],
+            st.session_state["active_top_n"],
+        )
 
 
 def main() -> None:
@@ -392,6 +523,7 @@ def main() -> None:
         page_icon="📊",
         layout="wide",
     )
+    apply_styles()
 
     data = st.session_state.get("dataset")
     if data is None:

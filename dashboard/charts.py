@@ -10,6 +10,8 @@ BLUE = "#5b8cff"
 AMBER = "#e0a93f"
 GRID = "rgba(148, 163, 184, 0.14)"
 TEXT = "#cbd5e1"
+RED = "#e5533f"
+FONT = "Arial, sans-serif"
 
 
 def volume_performance_chart(
@@ -93,6 +95,120 @@ def label_performance_chart(data: pd.DataFrame) -> go.Figure:
     return figure
 
 
+def lift_bar_chart(
+    data: pd.DataFrame,
+    label_column: str,
+    height: int = 320,
+) -> go.Figure:
+    """Build a categorical lift bar chart."""
+    colors = [GREEN if value >= 0 else RED for value in data["lift"]]
+    figure = go.Figure(
+        go.Bar(
+            x=data[label_column],
+            y=data["lift"],
+            marker_color=colors,
+            customdata=data[["ads"]],
+            text=data["lift"].map(lambda value: f"{value:+.1f}%"),
+            textposition="outside",
+            hovertemplate=(
+                "%{x}<br>Lift: %{y:+.1f}%<br>Ads: %{customdata[0]:,}"
+                "<extra></extra>"
+            ),
+        )
+    )
+    figure.add_hline(y=0, line_color=TEXT, opacity=0.5)
+    _apply_layout(figure, "")
+    figure.update_layout(height=height, showlegend=False)
+    figure.update_yaxes(title_text="Lift (%)")
+    return figure
+
+
+def circular_lift_chart(data: pd.DataFrame) -> go.Figure:
+    """Build a polar lift chart with compact token labels."""
+    colors = [GREEN if value >= 0 else RED for value in data["lift"]]
+    figure = go.Figure(
+        go.Barpolar(
+            r=data["lift"].abs(),
+            theta=data["token"],
+            marker_color=colors,
+            customdata=data[["label_type", "ads", "lift"]],
+            hovertemplate=(
+                "%{theta}<br>Type: %{customdata[0]}"
+                "<br>Lift: %{customdata[2]:+.1f}%"
+                "<br>Ads: %{customdata[1]:,}<extra></extra>"
+            ),
+        )
+    )
+    figure.update_layout(
+        height=480,
+        margin={"l": 70, "r": 70, "t": 35, "b": 35},
+        paper_bgcolor="rgba(0,0,0,0)",
+        font={"color": TEXT, "family": FONT},
+        hoverlabel={
+            "bgcolor": "#181c23",
+            "bordercolor": "rgba(255,255,255,0.14)",
+            "font": {"color": "#e7e9ee", "family": FONT},
+        },
+        showlegend=False,
+        polar={
+            "bgcolor": "rgba(0,0,0,0)",
+            "angularaxis": {
+                "gridcolor": GRID,
+                "tickfont": {"size": 10},
+            },
+            "radialaxis": {
+                "gridcolor": GRID,
+                "showticklabels": False,
+            },
+        },
+    )
+    return figure
+
+
+def word_cloud_chart(data: pd.DataFrame) -> go.Figure:
+    """Build a deterministic Plotly text cloud."""
+    if data.empty:
+        return go.Figure()
+    minimum = data["ads"].min()
+    maximum = data["ads"].max()
+    spread = maximum - minimum or 1
+    sizes = 14 + (data["ads"] - minimum) / spread * 28
+    colors = [GREEN if value >= 0 else RED for value in data["lift"]]
+    positions = range(len(data))
+    x = [((index * 7) % 11) - 5 for index in positions]
+    y = [((index * 5) % 9) - 4 for index in positions]
+    figure = go.Figure(
+        go.Scatter(
+            x=x,
+            y=y,
+            mode="text",
+            text=data["token"],
+            textfont={"size": sizes.tolist(), "color": colors},
+            customdata=data[["label_type", "ads", "lift"]],
+            hovertemplate=(
+                "%{text}<br>Type: %{customdata[0]}"
+                "<br>Ads: %{customdata[1]:,}"
+                "<br>Lift: %{customdata[2]:+.1f}%<extra></extra>"
+            ),
+        )
+    )
+    figure.update_layout(
+        height=480,
+        margin={"l": 20, "r": 20, "t": 20, "b": 20},
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"color": TEXT, "family": FONT},
+        hoverlabel={
+            "bgcolor": "#181c23",
+            "bordercolor": "rgba(255,255,255,0.14)",
+            "font": {"color": "#e7e9ee", "family": FONT},
+        },
+        xaxis={"visible": False},
+        yaxis={"visible": False},
+    )
+    return figure
+
+
 def _apply_layout(figure: go.Figure, x_title: str) -> None:
     figure.update_layout(
         height=380,
@@ -101,7 +217,22 @@ def _apply_layout(figure: go.Figure, x_title: str) -> None:
         legend={"orientation": "h", "y": 1.08, "x": 0},
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font={"color": TEXT},
+        font={"color": TEXT, "family": FONT, "size": 12},
+        hoverlabel={
+            "bgcolor": "#181c23",
+            "bordercolor": "rgba(255,255,255,0.14)",
+            "font": {"color": "#e7e9ee", "family": FONT},
+        },
+        bargap=0.22,
     )
-    figure.update_xaxes(title_text=x_title, gridcolor=GRID)
-    figure.update_yaxes(gridcolor=GRID)
+    figure.update_xaxes(
+        title_text=x_title,
+        gridcolor=GRID,
+        linecolor=GRID,
+        zerolinecolor=GRID,
+    )
+    figure.update_yaxes(
+        gridcolor=GRID,
+        linecolor=GRID,
+        zerolinecolor=GRID,
+    )

@@ -40,7 +40,13 @@ class AppStateTests(unittest.TestCase):
         self.assertEqual(len(self.app.tabs), 2)
         self.assertEqual(len(self.app.metric), 7)
         self.assertEqual(self.app.metric[0].value, "2,650")
-        self.assertEqual(len(self.app.get("plotly_chart")), 3)
+        self.assertEqual(len(self.app.get("plotly_chart")), 11)
+        self.assertTrue(
+            any(
+                "Unavailable" in info.value
+                for info in self.app.info
+            )
+        )
 
     def test_global_filters_update_ads_in_view(self):
         self.app.button[0].click().run()

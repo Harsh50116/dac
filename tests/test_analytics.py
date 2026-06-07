@@ -8,6 +8,8 @@ import pandas as pd
 
 from dashboard.analytics import (
     aggregate_kpi,
+    binary_lift_table,
+    categorical_lift_table,
     filter_data,
     kpi_summary,
     label_table,
@@ -148,6 +150,27 @@ class AnalyticsTests(unittest.TestCase):
         self.assertEqual(len(performance), 9)
         self.assertIn("ads", performance)
         self.assertIn("lift", performance)
+
+    def test_categorical_and_binary_lift_tables(self):
+        aspect = categorical_lift_table(
+            self.data,
+            "aspect_ratio",
+            "ROAS",
+            order=("1:1", "4:5", "9:16"),
+        )
+        numbers = binary_lift_table(
+            self.data,
+            "headline_has_numbers",
+            "ROAS",
+        )
+
+        self.assertEqual(aspect["value"].tolist(), ["1:1", "4:5", "9:16"])
+        self.assertGreater(
+            aspect.loc[aspect["value"].eq("4:5"), "lift"].iloc[0],
+            0,
+        )
+        self.assertEqual(numbers["value"].tolist(), ["True", "False"])
+        self.assertEqual(numbers["ads"].sum(), len(self.data))
 
 
 if __name__ == "__main__":

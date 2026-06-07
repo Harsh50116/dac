@@ -147,6 +147,51 @@ def label_type_table(data: pd.DataFrame, kpi: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def categorical_lift_table(
+    data: pd.DataFrame,
+    column: str,
+    kpi: str,
+    order: tuple[str, ...] = (),
+) -> pd.DataFrame:
+    """Return sample size and lift for each value in a categorical column."""
+    values = order or tuple(sorted(data[column].unique()))
+    rows = []
+    for value in values:
+        present = data[column].eq(value)
+        if present.any():
+            rows.append(
+                {
+                    "value": value,
+                    "ads": int(present.sum()),
+                    "lift": lift(data, present, kpi),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def binary_lift_table(
+    data: pd.DataFrame,
+    column: str,
+    kpi: str,
+) -> pd.DataFrame:
+    """Return lift for the true and false groups of a Boolean feature."""
+    present = data[column].astype(bool)
+    return pd.DataFrame(
+        [
+            {
+                "value": "True",
+                "ads": int(present.sum()),
+                "lift": lift(data, present, kpi),
+            },
+            {
+                "value": "False",
+                "ads": int((~present).sum()),
+                "lift": lift(data, ~present, kpi),
+            },
+        ]
+    )
+
+
 def rolling_label_lift(
     data: pd.DataFrame,
     token: str,
