@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import pandas as pd
 from generate import EFFECTS_CONFIG, EMOJI_POOL
+from dashboard.lift_engine import compute_lift as _engine_lift
 
 DEMO_TARGETS = {
     "n_ads": 2650,
@@ -47,10 +48,17 @@ def check_totals(df):
     return all_ok
 
 
-def compute_lift(df, col, present_mask):
-    """Compute lift = mean(col | present) / mean(col | absent)."""
-    present = df.loc[present_mask, col].mean()
-    absent = df.loc[~present_mask, col].mean()
+def raw_lift_ratio(df, kpi_col, present_mask):
+    """Compute raw lift ratio. Uses the engine for dashboard KPIs,
+    direct column access for validation-only metrics (conv_rate)."""
+    engine_kpis = {"roas": "ROAS", "ctr": "CTR"}
+    if kpi_col in engine_kpis:
+        result = _engine_lift(df, present_mask, engine_kpis[kpi_col])
+        if np.isnan(result.mean_absent) or result.mean_absent == 0:
+            return float("nan")
+        return result.mean_present / result.mean_absent
+    present = df.loc[present_mask, kpi_col].mean()
+    absent = df.loc[~present_mask, kpi_col].mean()
     if absent == 0 or np.isnan(absent):
         return float("nan")
     return present / absent
@@ -67,7 +75,6 @@ def check_lifts(df):
     df["has_emoji_body"] = df["body"].apply(lambda b: any(e in b for e in EMOJI_POOL))
     df["body_long"] = df["body"].str.len() > 50
 
-    # Only text-based label types — Image/Video are validated via media_type
     text_label_types = ["Noun", "Verb", "Phrase"]
     for lt in text_label_types:
         df[f"has_{lt}"] = df["labels"].str.contains(f":{lt}(?:\\||$)", regex=True)
@@ -80,7 +87,7 @@ def check_lifts(df):
 
         print("\n  Media type:")
         for mt in ["image", "video"]:
-            lift = compute_lift(df, kpi, df["media_type"] == mt)
+            lift = raw_lift_ratio(df, kpi, df["media_type"] == mt)
             designed = effects["media_type"][mt]
             diff = abs(lift / designed - 1)
             status = "OK" if diff < tol else "DRIFT"
@@ -90,7 +97,7 @@ def check_lifts(df):
 
         print("\n  Aspect ratio:")
         for ar in ["1:1", "4:5", "9:16"]:
-            lift = compute_lift(df, kpi, df["aspect_ratio"] == ar)
+            lift = raw_lift_ratio(df, kpi, df["aspect_ratio"] == ar)
             designed = effects["aspect_ratio"][ar]
             print(f"    {ar:<10s} lift={lift:.2f}  designed={designed:.2f}")
 
@@ -101,7 +108,7 @@ def check_lifts(df):
             ("has_emoji_body", "bd_emoji", "body_has_emoji"),
             ("body_long", "body_long", "body_long"),
         ]:
-            lift = compute_lift(df, kpi, df[flag])
+            lift = raw_lift_ratio(df, kpi, df[flag])
             designed = effects[cfg_key]
             diff = abs(lift / designed - 1)
             status = "OK" if diff < tol else "DRIFT"
@@ -111,7 +118,7 @@ def check_lifts(df):
 
         print("\n  Label types (text only — Image/Video validated via media_type):")
         for lt in text_label_types:
-            lift = compute_lift(df, kpi, df[f"has_{lt}"])
+            lift = raw_lift_ratio(df, kpi, df[f"has_{lt}"])
             designed = effects["label_type"][lt]
             print(f"    {lt:<10s} lift={lift:.2f}  designed={designed:.2f}")
 
