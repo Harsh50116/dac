@@ -22,11 +22,13 @@ from dashboard.charts import (
     circular_lift_chart,
     label_performance_chart,
     lift_bar_chart,
+    lift_color,
     rolling_lift_chart,
     sparkline_svg,
     volume_performance_chart,
     word_cloud_chart,
 )
+from dashboard.insights import generate_insights
 from dashboard.data import DataValidationError, calendar_months, load_dataset
 from dashboard.styles import apply_styles
 
@@ -500,6 +502,56 @@ def render_copy_details(data: pd.DataFrame, kpi: str) -> None:
                 )
 
 
+def render_insights(data: pd.DataFrame, kpi: str) -> None:
+    """Render the Phase 2 Insights tab."""
+    if data.empty:
+        st.warning("No ads match the selected global filters.")
+        return
+    insights = generate_insights(data, kpi)
+    if not insights:
+        st.info("Not enough data to generate insights.")
+        return
+
+    drivers = [i for i in insights if i.lift > 0]
+    drains = [i for i in insights if i.lift < 0]
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Top Drivers")
+        st.caption(f"Creative attributes that increase {kpi}")
+        for rank, insight in enumerate(drivers, 1):
+            color = lift_color(insight.lift)
+            st.markdown(
+                f'<div class="insight-row">'
+                f'<span class="insight-rank">#{rank}</span>'
+                f'<span class="insight-phrase">{insight.phrase}</span>'
+                f'<span class="insight-lift" style="color:{color}">'
+                f"+{insight.lift:.0f}%</span>"
+                f'<span class="insight-n">n={insight.n:,}</span>'
+                f'<span class="insight-conf {insight.confidence}">'
+                f"{insight.confidence}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    with right:
+        st.subheader("Top Drains")
+        st.caption(f"Creative attributes that decrease {kpi}")
+        for rank, insight in enumerate(drains, 1):
+            color = lift_color(insight.lift)
+            st.markdown(
+                f'<div class="insight-row">'
+                f'<span class="insight-rank">#{rank}</span>'
+                f'<span class="insight-phrase">{insight.phrase}</span>'
+                f'<span class="insight-lift" style="color:{color}">'
+                f"{insight.lift:.0f}%</span>"
+                f'<span class="insight-n">n={insight.n:,}</span>'
+                f'<span class="insight-conf {insight.confidence}">'
+                f"{insight.confidence}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+
 def render_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
     """Render the complete Phase 1 Details tab."""
     if data.empty:
@@ -526,7 +578,7 @@ def render_loaded_state(data: pd.DataFrame) -> None:
 
     filtered = render_global_controls(data)
     st.caption(f"{len(filtered):,} of {len(data):,} ads in view")
-    overview, details = st.tabs(("Overview", "Details"))
+    overview, details, insights_tab = st.tabs(("Overview", "Details", "Insights"))
     with overview:
         render_overview(filtered, st.session_state["active_kpi"])
     with details:
@@ -535,6 +587,8 @@ def render_loaded_state(data: pd.DataFrame) -> None:
             st.session_state["active_kpi"],
             st.session_state["active_top_n"],
         )
+    with insights_tab:
+        render_insights(filtered, st.session_state["active_kpi"])
 
 
 def main() -> None:

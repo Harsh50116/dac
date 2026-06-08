@@ -37,7 +37,7 @@ class AppStateTests(unittest.TestCase):
         self.assertEqual(self.app.number_input[0].value, 30)
         self.assertGreaterEqual(len(self.app.multiselect), 2)
         self.assertIn("2,650 of 2,650 ads in view", self.app.caption[1].value)
-        self.assertEqual(len(self.app.tabs), 2)
+        self.assertEqual(len(self.app.tabs), 3)
         self.assertEqual(len(self.app.metric), 7)
         self.assertEqual(self.app.metric[0].value, "2,650")
         self.assertEqual(len(self.app.get("plotly_chart")), 11)

@@ -16,7 +16,7 @@ RED = "#e5533f"
 FONT = "Arial, sans-serif"
 
 
-def _lift_color(value: float) -> str:
+def lift_color(value: float) -> str:
     stops = [
         (-50, (229, 72, 77)), (-15, (240, 138, 60)), (0, (227, 179, 65)),
         (18, (123, 200, 108)), (45, (47, 179, 68)),
@@ -119,7 +119,7 @@ def lift_bar_chart(
     height: int = 320,
 ) -> go.Figure:
     """Build a categorical lift bar chart."""
-    colors = [_lift_color(value) for value in data["lift"]]
+    colors = [lift_color(value) for value in data["lift"]]
     figure = go.Figure(
         go.Bar(
             x=data[label_column],
@@ -143,7 +143,7 @@ def lift_bar_chart(
 
 def circular_lift_chart(data: pd.DataFrame) -> go.Figure:
     """Build a polar lift chart with compact token labels."""
-    colors = [_lift_color(value) for value in data["lift"]]
+    colors = [lift_color(value) for value in data["lift"]]
     n = len(data)
     step = 1 if n <= 30 else 2 if n <= 44 else 3
     tokens = [t[:12] + "…" if len(t) > 13 else t for t in data["token"]]
@@ -199,7 +199,7 @@ def word_cloud_chart(data: pd.DataFrame) -> go.Figure:
     maximum = data["ads"].max()
     spread = maximum - minimum or 1
     sizes = 13 + (data["ads"] - minimum) / spread * 33
-    colors = [_lift_color(value) for value in data["lift"]]
+    colors = [lift_color(value) for value in data["lift"]]
     n = len(data)
     golden = 2.3998277
     x = [math.sqrt(i + 0.5) * 0.8 * math.cos(i * golden) for i in range(n)]
