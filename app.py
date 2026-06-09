@@ -179,16 +179,8 @@ def render_global_controls(data: pd.DataFrame) -> pd.DataFrame:
     return filtered
 
 
-def _month_over_month_delta(values: list[float]) -> float:
-    clean = [v for v in values if v is not None and pd.notna(v) and v != 0]
-    if len(clean) < 2:
-        return 0.0
-    last, prev = clean[-1], clean[-2]
-    return (last - prev) / abs(prev) * 100 if prev else 0.0
-
-
 def render_kpi_cards(data: pd.DataFrame) -> None:
-    """Render the seven Overview headline values with deltas and sparklines."""
+    """Render the seven Overview headline values with sparklines."""
     summary = kpi_summary(data)
     monthly = monthly_performance(data)
     cards = (
@@ -203,14 +195,11 @@ def render_kpi_cards(data: pd.DataFrame) -> None:
     columns = st.columns(7)
     for i, (column, (label, value, series)) in enumerate(zip(columns, cards)):
         spark_values = series.tolist()
-        delta = _month_over_month_delta(spark_values)
-        up = delta >= 0
-        color = "#34c77b" if up else "#e5533f"
         with column:
-            st.metric(label, value, delta=f"{delta:+.1f}%")
+            st.metric(label, value)
             st.markdown(
                 f'<div class="sparkline-wrap">'
-                f"{sparkline_svg(spark_values, color, idx=i)}</div>",
+                f"{sparkline_svg(spark_values, '#888', idx=i)}</div>",
                 unsafe_allow_html=True,
             )
 

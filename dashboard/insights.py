@@ -10,9 +10,11 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from dashboard.interactions import attribute_mask
 from dashboard.lift_engine import LiftResult, scan_all
 
 
+JACCARD_DEDUP_THRESHOLD = 0.95
 CONFIDENCE_THRESHOLDS = {"high": 200, "medium": 50}
 CONFIDENCE_WEIGHTS = {"high": 1.0, "medium": 0.6, "low": 0.3}
 
@@ -65,7 +67,7 @@ def generate_insights(
             statement=statement,
         ))
     insights.sort(key=lambda x: x.score, reverse=True)
-    return insights
+    return _deduplicate_insights(data, insights)
 
 
 def _confidence(n: int) -> str:
@@ -97,6 +99,25 @@ def _phrase_for_key(key: str) -> str:
             return f"Label '{token}'"
         return f"The word '{token}'"
     return key
+
+
+def _deduplicate_insights(
+    data: pd.DataFrame, insights: list[Insight],
+) -> list[Insight]:
+    """Drop later entries whose attribute mask is near-identical to an earlier one."""
+    kept: list[tuple[Insight, pd.Series]] = []
+    for insight in insights:
+        mask = attribute_mask(data, insight.key)
+        duplicate = False
+        for _, prev_mask in kept:
+            intersection = int((mask & prev_mask).sum())
+            union = int((mask | prev_mask).sum())
+            if union > 0 and intersection / union >= JACCARD_DEDUP_THRESHOLD:
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append((insight, mask))
+    return [ins for ins, _ in kept]
 
 
 def _build_statement(
