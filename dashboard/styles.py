@@ -227,6 +227,74 @@ h3 {
   background: rgba(154, 160, 171, 0.1);
 }
 
+.rec-card {
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(145deg, rgba(24, 28, 35, 0.92), rgba(20, 23, 29, 0.86));
+  border: 1px solid var(--dac-border);
+  border-radius: 12px;
+}
+
+.rec-card.do-more {
+  border-left: 3px solid #34c77b;
+}
+
+.rec-card.avoid {
+  border-left: 3px solid #e5533f;
+}
+
+.rec-hypothesis {
+  color: var(--dac-text);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  margin-bottom: 0.5rem;
+}
+
+.rec-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.rec-lift {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.rec-stat {
+  color: var(--dac-muted);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.72rem;
+}
+
+.rec-tag {
+  padding: 0.12rem 0.45rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 5px;
+}
+
+.rec-tag.durable {
+  color: #34c77b;
+  background: rgba(52, 199, 123, 0.12);
+}
+
+.rec-n {
+  color: var(--dac-muted);
+  font-size: 0.72rem;
+}
+
+.rec-synergy {
+  margin-top: 0.4rem;
+  color: var(--dac-accent);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
 hr {
   border-color: var(--dac-border) !important;
 }
