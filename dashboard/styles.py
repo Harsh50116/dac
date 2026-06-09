@@ -227,6 +227,99 @@ h3 {
   background: rgba(154, 160, 171, 0.1);
 }
 
+.insight-section-header {
+  margin-top: 1.2rem;
+  margin-bottom: 0.5rem;
+  color: var(--dac-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.insight-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+}
+
+.insight-bar-label {
+  flex: 0 0 200px;
+  color: var(--dac-text);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.insight-bar-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 26px;
+  background: rgba(148, 163, 184, 0.08);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.insight-bar-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 5px;
+}
+
+.insight-bar-stats {
+  flex: 0 0 70px;
+  text-align: right;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.insight-bar-n {
+  display: block;
+  color: var(--dac-muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.insight-thin {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.08rem 0.35rem;
+  color: var(--dac-muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(154, 160, 171, 0.12);
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.insight-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+  color: var(--dac-muted);
+  font-size: 0.72rem;
+}
+
+.insight-legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.insight-footnote {
+  margin-top: 1.5rem;
+  color: var(--dac-muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
 .rec-card {
   padding: 0.85rem 1rem;
   margin-bottom: 0.5rem;

@@ -120,6 +120,29 @@ def _deduplicate_insights(
     return [ins for ins, _ in kept]
 
 
+def group_by_category(insights: list[Insight]) -> dict[str, list[Insight]]:
+    """Group insights into UI display categories."""
+    groups: dict[str, list[Insight]] = {
+        "Format": [],
+        "Aspect Ratio": [],
+        "Ad Copy": [],
+        "Labels": [],
+    }
+    for insight in insights:
+        key = insight.key
+        if key.startswith("media_type="):
+            groups["Format"].append(insight)
+        elif key.startswith("aspect_ratio="):
+            groups["Aspect Ratio"].append(insight)
+        elif key.startswith("label="):
+            groups["Labels"].append(insight)
+        elif key.startswith("label_type="):
+            continue
+        else:
+            groups["Ad Copy"].append(insight)
+    return {k: v for k, v in groups.items() if v}
+
+
 def _build_statement(
     phrase: str, lift: float, kpi: str, n: int, confidence: str,
 ) -> str:

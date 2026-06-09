@@ -29,7 +29,7 @@ from dashboard.charts import (
     volume_performance_chart,
     word_cloud_chart,
 )
-from dashboard.insights import generate_insights
+from dashboard.insights import generate_insights, group_by_category
 from dashboard.recommend import generate_recommendations
 from dashboard.data import DataValidationError, calendar_months, load_dataset
 from dashboard.styles import apply_styles
@@ -493,8 +493,37 @@ def render_copy_details(data: pd.DataFrame, kpi: str) -> None:
                 )
 
 
+def _insight_bar_html(
+    insight, max_abs_lift: float, kpi_upper: str,
+) -> str:
+    """Render one horizontal bar row matching the mockup layout."""
+    phrase = escape(insight.phrase)
+    color = lift_color(insight.lift)
+    sign = "+" if insight.lift > 0 else ""
+    thin = '<span class="insight-thin">thin</span>' if insight.n < 200 else ""
+
+    pct = abs(insight.lift) / max_abs_lift * 45 if max_abs_lift else 0
+    if insight.lift >= 0:
+        bar_style = f"left:50%;width:{pct:.1f}%;background:{color};"
+    else:
+        bar_style = f"right:50%;width:{pct:.1f}%;background:{color};"
+
+    return (
+        f'<div class="insight-bar-row">'
+        f'<span class="insight-bar-label">{phrase}{thin}</span>'
+        f'<div class="insight-bar-track">'
+        f'<div class="insight-bar-fill" style="{bar_style}"></div>'
+        f"</div>"
+        f'<span class="insight-bar-stats" style="color:{color}">'
+        f"{sign}{insight.lift:.0f}%"
+        f'<span class="insight-bar-n">n={insight.n:,}</span>'
+        f"</span>"
+        f"</div>"
+    )
+
+
 def render_insights(data: pd.DataFrame, kpi: str) -> None:
-    """Render the Phase 2 Insights tab."""
+    """Render the Insights tab with grouped horizontal bars by category."""
     if data.empty:
         st.warning("No ads match the selected global filters.")
         return
@@ -503,48 +532,47 @@ def render_insights(data: pd.DataFrame, kpi: str) -> None:
         st.info("Not enough data to generate insights.")
         return
 
-    drivers = [i for i in insights if i.lift > 0]
-    drains = [i for i in insights if i.lift < 0]
+    kpi_upper = kpi.upper()
+    groups = group_by_category(insights)
+    max_abs_lift = max(abs(i.lift) for i in insights)
 
-    left, right = st.columns(2)
-    with left:
-        st.subheader("Top Drivers")
-        st.caption(f"Creative attributes that increase {kpi}")
-        for rank, insight in enumerate(drivers, 1):
-            color = lift_color(insight.lift)
-            phrase = escape(insight.phrase)
-            conf = escape(insight.confidence)
-            st.markdown(
-                f'<div class="insight-row">'
-                f'<span class="insight-rank">#{rank}</span>'
-                f'<span class="insight-phrase">{phrase}</span>'
-                f'<span class="insight-lift" style="color:{color}">'
-                f"+{insight.lift:.0f}%</span>"
-                f'<span class="insight-n">n={insight.n:,}</span>'
-                f'<span class="insight-conf {conf}">'
-                f"{conf}</span>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-    with right:
-        st.subheader("Top Drains")
-        st.caption(f"Creative attributes that decrease {kpi}")
-        for rank, insight in enumerate(drains, 1):
-            color = lift_color(insight.lift)
-            phrase = escape(insight.phrase)
-            conf = escape(insight.confidence)
-            st.markdown(
-                f'<div class="insight-row">'
-                f'<span class="insight-rank">#{rank}</span>'
-                f'<span class="insight-phrase">{phrase}</span>'
-                f'<span class="insight-lift" style="color:{color}">'
-                f"{insight.lift:.0f}%</span>"
-                f'<span class="insight-n">n={insight.n:,}</span>'
-                f'<span class="insight-conf {conf}">'
-                f"{conf}</span>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+    st.subheader(f"What moves {kpi_upper}")
+    st.caption(
+        f"Every creative lever ranked by its effect on {kpi_upper} versus "
+        f"the account baseline. Bars read left (drains) to right (drivers); "
+        f"width is magnitude."
+    )
+    st.markdown(
+        f'<div class="insight-legend">'
+        f'<span class="insight-legend-dot" style="background:#e5533f;"></span>'
+        f"Drains {kpi_upper}"
+        f"&nbsp;&nbsp;← 0% →&nbsp;&nbsp;"
+        f'<span class="insight-legend-dot" style="background:#34c77b;"></span>'
+        f"Lifts {kpi_upper}"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    for category in ("Format", "Aspect Ratio", "Ad Copy", "Labels"):
+        if category not in groups:
+            continue
+        items = [i for i in groups[category] if i.n >= 200]
+        if not items:
+            continue
+        html = f'<div class="insight-section-header">{escape(category)}</div>'
+        for insight in items:
+            html += _insight_bar_html(insight, max_abs_lift, kpi_upper)
+        st.markdown(html, unsafe_allow_html=True)
+
+    st.markdown(
+        f'<div class="insight-footnote">'
+        f"Lift is computed per lever against the filtered universe, not "
+        f"against each other — so percentages don't sum. "
+        f"<b>n</b> is the number of ads carrying that attribute. "
+        f"Levers with n&lt;200 are excluded as directional only."
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
 
 @st.cache_data(show_spinner="Generating recommendations…")
