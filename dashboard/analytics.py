@@ -4,9 +4,12 @@ import numpy as np
 import pandas as pd
 
 from dashboard.data import calendar_months
-
-
-KPI_NAMES = ("ROAS", "CTR", "CPP")
+from dashboard.lift_engine import (
+    KPI_NAMES,
+    compute_lift,
+    kpi_series,
+    _normalize_kpi,
+)
 
 
 def filter_data(
@@ -27,18 +30,6 @@ def filter_data(
     if media_types:
         mask &= data["media_type"].isin(media_types)
     return data.loc[mask].copy()
-
-
-def kpi_series(data: pd.DataFrame, kpi: str) -> pd.Series:
-    """Return the per-ad KPI values used for lift comparisons."""
-    name = _normalize_kpi(kpi)
-    if name == "ROAS":
-        values = data["revenue"].div(data["spend"].replace(0, np.nan))
-    elif name == "CTR":
-        values = data["clicks"].div(data["impressions"].replace(0, np.nan))
-    else:
-        values = data["spend"].div(data["purchases"].replace(0, np.nan))
-    return values.replace([np.inf, -np.inf], np.nan)
 
 
 def aggregate_kpi(data: pd.DataFrame, kpi: str) -> float:
@@ -68,15 +59,7 @@ def kpi_summary(data: pd.DataFrame) -> dict[str, float]:
 
 def lift(data: pd.DataFrame, present: pd.Series, kpi: str) -> float:
     """Return percent lift for present versus absent ads."""
-    name = _normalize_kpi(kpi)
-    present = present.reindex(data.index, fill_value=False).astype(bool)
-    values = kpi_series(data, name)
-    present_value = values[present].mean()
-    absent_value = values[~present].mean()
-    if pd.isna(present_value) or pd.isna(absent_value) or absent_value == 0:
-        return np.nan
-    result = (present_value / absent_value - 1) * 100
-    return -result if name == "CPP" else result
+    return compute_lift(data, present, kpi).lift
 
 
 def monthly_performance(data: pd.DataFrame) -> pd.DataFrame:
@@ -283,13 +266,6 @@ def rows_with_labels(
         )
     )
     return data.loc[present].copy()
-
-
-def _normalize_kpi(kpi: str) -> str:
-    name = kpi.upper()
-    if name not in KPI_NAMES:
-        raise ValueError(f"Unsupported KPI '{kpi}'.")
-    return name
 
 
 def _safe_ratio(numerator: float, denominator: float) -> float:

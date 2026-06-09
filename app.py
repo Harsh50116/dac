@@ -1,5 +1,6 @@
 """Streamlit entry point for the Phase 1 dashboard."""
 
+from html import escape
 from pathlib import Path
 
 import pandas as pd
@@ -22,11 +23,14 @@ from dashboard.charts import (
     circular_lift_chart,
     label_performance_chart,
     lift_bar_chart,
+    lift_color,
     rolling_lift_chart,
     sparkline_svg,
     volume_performance_chart,
     word_cloud_chart,
 )
+from dashboard.insights import generate_insights
+from dashboard.recommend import generate_recommendations
 from dashboard.data import DataValidationError, calendar_months, load_dataset
 from dashboard.styles import apply_styles
 
@@ -175,16 +179,8 @@ def render_global_controls(data: pd.DataFrame) -> pd.DataFrame:
     return filtered
 
 
-def _month_over_month_delta(values: list[float]) -> float:
-    clean = [v for v in values if v is not None and pd.notna(v) and v != 0]
-    if len(clean) < 2:
-        return 0.0
-    last, prev = clean[-1], clean[-2]
-    return (last - prev) / abs(prev) * 100 if prev else 0.0
-
-
 def render_kpi_cards(data: pd.DataFrame) -> None:
-    """Render the seven Overview headline values with deltas and sparklines."""
+    """Render the seven Overview headline values with sparklines."""
     summary = kpi_summary(data)
     monthly = monthly_performance(data)
     cards = (
@@ -199,14 +195,11 @@ def render_kpi_cards(data: pd.DataFrame) -> None:
     columns = st.columns(7)
     for i, (column, (label, value, series)) in enumerate(zip(columns, cards)):
         spark_values = series.tolist()
-        delta = _month_over_month_delta(spark_values)
-        up = delta >= 0
-        color = "#34c77b" if up else "#e5533f"
         with column:
-            st.metric(label, value, delta=f"{delta:+.1f}%")
+            st.metric(label, value)
             st.markdown(
                 f'<div class="sparkline-wrap">'
-                f"{sparkline_svg(spark_values, color, idx=i)}</div>",
+                f"{sparkline_svg(spark_values, '#888', idx=i)}</div>",
                 unsafe_allow_html=True,
             )
 
@@ -500,6 +493,141 @@ def render_copy_details(data: pd.DataFrame, kpi: str) -> None:
                 )
 
 
+def render_insights(data: pd.DataFrame, kpi: str) -> None:
+    """Render the Phase 2 Insights tab."""
+    if data.empty:
+        st.warning("No ads match the selected global filters.")
+        return
+    insights = generate_insights(data, kpi)
+    if not insights:
+        st.info("Not enough data to generate insights.")
+        return
+
+    drivers = [i for i in insights if i.lift > 0]
+    drains = [i for i in insights if i.lift < 0]
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Top Drivers")
+        st.caption(f"Creative attributes that increase {kpi}")
+        for rank, insight in enumerate(drivers, 1):
+            color = lift_color(insight.lift)
+            phrase = escape(insight.phrase)
+            conf = escape(insight.confidence)
+            st.markdown(
+                f'<div class="insight-row">'
+                f'<span class="insight-rank">#{rank}</span>'
+                f'<span class="insight-phrase">{phrase}</span>'
+                f'<span class="insight-lift" style="color:{color}">'
+                f"+{insight.lift:.0f}%</span>"
+                f'<span class="insight-n">n={insight.n:,}</span>'
+                f'<span class="insight-conf {conf}">'
+                f"{conf}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    with right:
+        st.subheader("Top Drains")
+        st.caption(f"Creative attributes that decrease {kpi}")
+        for rank, insight in enumerate(drains, 1):
+            color = lift_color(insight.lift)
+            phrase = escape(insight.phrase)
+            conf = escape(insight.confidence)
+            st.markdown(
+                f'<div class="insight-row">'
+                f'<span class="insight-rank">#{rank}</span>'
+                f'<span class="insight-phrase">{phrase}</span>'
+                f'<span class="insight-lift" style="color:{color}">'
+                f"{insight.lift:.0f}%</span>"
+                f'<span class="insight-n">n={insight.n:,}</span>'
+                f'<span class="insight-conf {conf}">'
+                f"{conf}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+
+@st.cache_data(show_spinner="Generating recommendations…")
+def _cached_recommendations(
+    data: pd.DataFrame, kpi: str,
+) -> list:
+    return generate_recommendations(data, kpi)
+
+
+def render_recommendations(data: pd.DataFrame, kpi: str) -> None:
+    """Render the Phase 3 Recommendations tab."""
+    if data.empty:
+        st.warning("No ads match the selected global filters.")
+        return
+    recs = _cached_recommendations(data, kpi)
+    if not recs:
+        st.info("Not enough data to generate recommendations.")
+        return
+
+    do_more = [r for r in recs if r.action == "do_more"]
+    avoid = [r for r in recs if r.action == "avoid"]
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Do More Of")
+        st.caption(f"Durable, significant drivers of {kpi}")
+        for rec in do_more:
+            color = lift_color(rec.lift)
+            hypothesis = escape(rec.hypothesis)
+            tag = escape(rec.durability_tag)
+            synergy_html = ""
+            if rec.synergy_partner and rec.synergy_score is not None:
+                partner = escape(rec.synergy_partner)
+                synergy_html = (
+                    f'<div class="rec-synergy">Synergy with '
+                    f"{partner}: "
+                    f"{rec.synergy_score:+.1f}%</div>"
+                )
+            st.markdown(
+                f'<div class="rec-card do-more">'
+                f'<div class="rec-hypothesis">{hypothesis}</div>'
+                f'<div class="rec-evidence">'
+                f'<span class="rec-lift" style="color:{color}">'
+                f"+{rec.lift:.0f}%</span>"
+                f'<span class="rec-stat">p={rec.p_value:.4f}</span>'
+                f'<span class="rec-tag durable">{tag}</span>'
+                f'<span class="rec-n">n={rec.n:,}</span>'
+                f"</div>"
+                f"{synergy_html}"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    with right:
+        st.subheader("Avoid")
+        st.caption(f"Durable, significant drains on {kpi}")
+        for rec in avoid:
+            color = lift_color(rec.lift)
+            hypothesis = escape(rec.hypothesis)
+            tag = escape(rec.durability_tag)
+            synergy_html = ""
+            if rec.synergy_partner and rec.synergy_score is not None:
+                partner = escape(rec.synergy_partner)
+                synergy_html = (
+                    f'<div class="rec-synergy">Synergy with '
+                    f"{partner}: "
+                    f"{rec.synergy_score:+.1f}%</div>"
+                )
+            st.markdown(
+                f'<div class="rec-card avoid">'
+                f'<div class="rec-hypothesis">{hypothesis}</div>'
+                f'<div class="rec-evidence">'
+                f'<span class="rec-lift" style="color:{color}">'
+                f"{rec.lift:.0f}%</span>"
+                f'<span class="rec-stat">p={rec.p_value:.4f}</span>'
+                f'<span class="rec-tag durable">{tag}</span>'
+                f'<span class="rec-n">n={rec.n:,}</span>'
+                f"</div>"
+                f"{synergy_html}"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+
 def render_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
     """Render the complete Phase 1 Details tab."""
     if data.empty:
@@ -526,7 +654,9 @@ def render_loaded_state(data: pd.DataFrame) -> None:
 
     filtered = render_global_controls(data)
     st.caption(f"{len(filtered):,} of {len(data):,} ads in view")
-    overview, details = st.tabs(("Overview", "Details"))
+    overview, details, insights_tab, recommendations_tab = st.tabs(
+        ("Overview", "Details", "Insights", "Recommendations"),
+    )
     with overview:
         render_overview(filtered, st.session_state["active_kpi"])
     with details:
@@ -535,6 +665,10 @@ def render_loaded_state(data: pd.DataFrame) -> None:
             st.session_state["active_kpi"],
             st.session_state["active_top_n"],
         )
+    with insights_tab:
+        render_insights(filtered, st.session_state["active_kpi"])
+    with recommendations_tab:
+        render_recommendations(filtered, st.session_state["active_kpi"])
 
 
 def main() -> None:
