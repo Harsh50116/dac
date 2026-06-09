@@ -30,8 +30,10 @@ from dashboard.charts import (
     word_cloud_chart,
 )
 from dashboard.insights import generate_insights, group_by_category
+from dashboard.interactions import attribute_mask
 from dashboard.recommend import generate_recommendations
 from dashboard.data import DataValidationError, calendar_months, load_dataset
+from dashboard.significance_decay import significance_for_mask
 from dashboard.styles import apply_styles
 
 
@@ -522,20 +524,49 @@ def _insight_bar_html(
     )
 
 
+@st.cache_data(show_spinner="Analyzing insights…")
+def _analyze_insights(
+    data: pd.DataFrame, kpi: str, top_n_labels: int,
+) -> tuple[dict, float]:
+    """Group insights by category; filter labels by significance + n >= 150 + top_n."""
+    insights = generate_insights(data, kpi, top_n_labels=top_n_labels)
+    if not insights:
+        return {}, 0.0
+
+    groups = group_by_category(insights)
+    max_abs_lift = max(abs(i.lift) for i in insights)
+
+    if "Labels" in groups:
+        filtered = []
+        for insight in groups["Labels"]:
+            if insight.n < 150:
+                continue
+            mask = attribute_mask(data, insight.key)
+            sig = significance_for_mask(data, mask, kpi)
+            if sig.significant:
+                filtered.append(insight)
+        filtered.sort(key=lambda i: abs(i.lift), reverse=True)
+        if filtered:
+            groups["Labels"] = filtered[:top_n_labels]
+        else:
+            del groups["Labels"]
+
+    return groups, max_abs_lift
+
+
 def render_insights(data: pd.DataFrame, kpi: str) -> None:
     """Render the Insights tab with grouped horizontal bars by category."""
     if data.empty:
         st.warning("No ads match the selected global filters.")
         return
-    insights = generate_insights(data, kpi)
-    if not insights:
+
+    top_n = st.session_state.get("active_top_n", 30)
+    groups, max_abs_lift = _analyze_insights(data, kpi, top_n)
+    if not groups:
         st.info("Not enough data to generate insights.")
         return
 
     kpi_upper = kpi.upper()
-    groups = group_by_category(insights)
-    max_abs_lift = max(abs(i.lift) for i in insights)
-
     st.subheader(f"What moves {kpi_upper}")
     st.caption(
         f"Every creative lever ranked by its effect on {kpi_upper} versus "
@@ -553,14 +584,18 @@ def render_insights(data: pd.DataFrame, kpi: str) -> None:
         unsafe_allow_html=True,
     )
 
-    for category in ("Format", "Aspect Ratio", "Ad Copy", "Labels"):
+    for category in ("Format", "Aspect Ratio", "Ad Copy"):
         if category not in groups:
             continue
-        items = [i for i in groups[category] if i.n >= 200]
-        if not items:
-            continue
+        items = groups[category]
         html = f'<div class="insight-section-header">{escape(category)}</div>'
         for insight in items:
+            html += _insight_bar_html(insight, max_abs_lift, kpi_upper)
+        st.markdown(html, unsafe_allow_html=True)
+
+    if "Labels" in groups:
+        html = '<div class="insight-section-header">Labels</div>'
+        for insight in groups["Labels"]:
             html += _insight_bar_html(insight, max_abs_lift, kpi_upper)
         st.markdown(html, unsafe_allow_html=True)
 
@@ -569,7 +604,10 @@ def render_insights(data: pd.DataFrame, kpi: str) -> None:
         f"Lift is computed per lever against the filtered universe, not "
         f"against each other — so percentages don't sum. "
         f"<b>n</b> is the number of ads carrying that attribute. "
-        f"Levers with n&lt;200 are excluded as directional only."
+        f"Labels require statistical significance (p&lt;0.05) and "
+        f"n≥150 to appear. "
+        f'Levers with n&lt;200 are flagged <span class="insight-thin">thin</span> '
+        f"and should be read as directional, not conclusive."
         f"</div>",
         unsafe_allow_html=True,
     )
