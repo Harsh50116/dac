@@ -109,11 +109,16 @@ h3 {
 }
 
 [data-testid="stFileUploaderDropzone"] {
-  min-height: 250px;
-  padding: 2.2rem;
+  min-height: 80px;
+  padding: 1rem 1.5rem;
   background: rgba(20, 23, 29, 0.9);
   border: 1px dashed rgba(91, 140, 255, 0.45);
-  border-radius: 18px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 [data-testid="stFileUploaderDropzone"]:hover {
@@ -542,8 +547,8 @@ hr {
   }
 
   [data-testid="stFileUploaderDropzone"] {
-    min-height: 210px;
-    padding: 1.25rem;
+    min-height: 70px;
+    padding: 0.85rem 1rem;
   }
 }
 </style>

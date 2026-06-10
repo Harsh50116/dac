@@ -107,6 +107,7 @@ def render_upload_state() -> None:
             set_dataset(load_dataset(uploaded), uploaded.name)
         except DataValidationError as error:
             st.error(str(error))
+            st.info("Try one of the sample datasets below to explore the dashboard.")
         else:
             st.rerun()
 

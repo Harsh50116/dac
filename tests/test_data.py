@@ -66,7 +66,7 @@ class DataLoadingTests(unittest.TestCase):
         self.assertFalse(first["has_punctuation"])
 
     def test_csv_parquet_and_excel_are_supported(self):
-        sample = pd.read_csv(PHASE_ONE_DATA, nrows=3)
+        sample = pd.read_csv(PHASE_ONE_DATA, nrows=150)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             paths = [
@@ -80,7 +80,7 @@ class DataLoadingTests(unittest.TestCase):
 
             for path in paths:
                 with self.subTest(path=path.suffix):
-                    self.assertEqual(len(load_dataset(path)), 3)
+                    self.assertEqual(len(load_dataset(path)), 150)
 
 
 class DataValidationTests(unittest.TestCase):
