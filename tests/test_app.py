@@ -21,7 +21,7 @@ class AppStateTests(unittest.TestCase):
         )
         self.assertEqual(
             self.app.button[0].label,
-            "Load sample creative dataset",
+            "Load sample dataset 1",
         )
 
     def test_sample_data_loads_global_controls(self):
@@ -76,7 +76,7 @@ class AppStateTests(unittest.TestCase):
         self.assertEqual(len(self.app.radio), 0)
         self.assertEqual(
             self.app.button[0].label,
-            "Load sample creative dataset",
+            "Load sample dataset 1",
         )
 
 

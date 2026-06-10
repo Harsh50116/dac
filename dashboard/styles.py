@@ -228,13 +228,15 @@ h3 {
 }
 
 .insight-section-header {
-  margin-top: 1.2rem;
-  margin-bottom: 0.5rem;
-  color: var(--dac-muted);
-  font-size: 0.7rem;
-  font-weight: 700;
+  margin-top: 1.8rem;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.4rem;
+  color: var(--dac-text);
+  font-size: 0.92rem;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  border-bottom: 1px solid var(--dac-border);
 }
 
 .insight-bar-row {

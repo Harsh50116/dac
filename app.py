@@ -37,10 +37,11 @@ from dashboard.significance_decay import significance_for_mask
 from dashboard.styles import apply_styles
 
 
-SAMPLE_DATA = (
-    Path(__file__).parent
-    / "data"
-    / "ads-monthly_v1_2026-06-06_2023-01_2025-01.csv"
+_DATA_DIR = Path(__file__).parent / "data"
+SAMPLE_DATASETS = (
+    ("Load sample dataset 1", _DATA_DIR / "ads-monthly_v1_2026-06-06_2023-01_2025-01.csv"),
+    ("Load sample dataset 2", _DATA_DIR / "ads_seed42.csv"),
+    ("Load sample dataset 3", _DATA_DIR / "ads_flipped.csv"),
 )
 FILTER_KEYS = (
     "filter_kpi",
@@ -68,9 +69,11 @@ def unload_dataset() -> None:
         st.session_state.pop(key, None)
 
 
-def load_sample() -> None:
-    """Load the bundled Phase 1 dataset."""
-    set_dataset(load_dataset(SAMPLE_DATA), SAMPLE_DATA.name)
+def _make_loader(path: Path):
+    """Return a callback that loads the given sample dataset."""
+    def _load():
+        set_dataset(load_dataset(path), path.name)
+    return _load
 
 
 def reset_filters(months: pd.DatetimeIndex) -> None:
@@ -107,11 +110,15 @@ def render_upload_state() -> None:
         else:
             st.rerun()
 
-    st.button(
-        "Load sample creative dataset",
-        type="primary",
-        on_click=load_sample,
-    )
+    cols = st.columns(len(SAMPLE_DATASETS))
+    for col, (label, path) in zip(cols, SAMPLE_DATASETS):
+        with col:
+            st.button(
+                label,
+                type="primary",
+                on_click=_make_loader(path),
+                use_container_width=True,
+            )
 
 
 def render_global_controls(data: pd.DataFrame) -> pd.DataFrame:

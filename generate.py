@@ -146,10 +146,11 @@ def generate_month_list(start, end):
     return [m.strftime("%Y-%m") for m in months]
 
 
-def generate_monthly_counts(n_ads, months, rng):
+def generate_monthly_counts(n_ads, months, rng, config=None):
     """Sample spiky per-month ad counts that sum to n_ads."""
+    cfg = config or EFFECTS_CONFIG
     n_months = len(months)
-    alpha = EFFECTS_CONFIG["volume_alpha"]
+    alpha = cfg["volume_alpha"]
     proportions = rng.dirichlet(np.full(n_months, alpha))
     raw = proportions * n_ads
     counts = np.floor(raw).astype(int)
@@ -164,12 +165,13 @@ def generate_monthly_counts(n_ads, months, rng):
 # STEP 3 — Attribute sampling
 # =============================================================================
 
-def sample_attributes(monthly_counts, rng):
+def sample_attributes(monthly_counts, rng, config=None):
     """Sample per-ad attributes based on config probabilities."""
-    probs = EFFECTS_CONFIG["attribute_probs"]
-    cat_weights = EFFECTS_CONFIG["category_weights"]
-    label_probs = EFFECTS_CONFIG["label_type_probs"]
-    phrases = list(EFFECTS_CONFIG["phrases"].keys())
+    cfg = config or EFFECTS_CONFIG
+    probs = cfg["attribute_probs"]
+    cat_weights = cfg["category_weights"]
+    label_probs = cfg["label_type_probs"]
+    phrases = list(cfg["phrases"].keys())
 
     categories = list(cat_weights.keys())
     cat_probs = np.array(list(cat_weights.values()))
@@ -224,23 +226,24 @@ def sample_attributes(monthly_counts, rng):
 # STEP 4 — Forward effect model (KPIs)
 # =============================================================================
 
-def category_temporal_effect(category, month_index):
+def category_temporal_effect(category, month_index, config=None):
     """Sine-wave multiplier for a category at a given month index."""
-    cfg = EFFECTS_CONFIG["categories"][category]
+    cfg = (config or EFFECTS_CONFIG)["categories"][category]
     angle = 2 * np.pi * month_index / cfg["period"] + cfg["phase"]
     return cfg["base"] + cfg["amplitude"] * np.sin(angle)
 
 
-def phrase_temporal_effect(phrase, month_index):
+def phrase_temporal_effect(phrase, month_index, config=None):
     """Gaussian bump multiplier for a phrase at a given month index."""
-    cfg = EFFECTS_CONFIG["phrases"][phrase]
+    cfg = (config or EFFECTS_CONFIG)["phrases"][phrase]
     decay = np.exp(-0.5 * ((month_index - cfg["peak_month"]) / cfg["sigma"]) ** 2)
     return 1.0 + (cfg["peak_mult"] - 1.0) * decay
 
 
-def compute_kpi_multiplier(row, month_index, effect_key):
+def compute_kpi_multiplier(row, month_index, effect_key, config=None):
     """Compute the combined multiplier for one KPI (roas/ctr/conv_rate)."""
-    effects = EFFECTS_CONFIG[f"{effect_key}_effects"]
+    cfg = config or EFFECTS_CONFIG
+    effects = cfg[f"{effect_key}_effects"]
 
     mult = 1.0
     mult *= effects["media_type"][row["media_type"]]
@@ -253,36 +256,37 @@ def compute_kpi_multiplier(row, month_index, effect_key):
     for ltype in row["label_types"]:
         mult *= effects["label_type"][ltype]
 
-    mult *= category_temporal_effect(row["category"], month_index)
+    mult *= category_temporal_effect(row["category"], month_index, config=cfg)
     if row["assigned_phrase"]:
-        mult *= phrase_temporal_effect(row["assigned_phrase"], month_index)
+        mult *= phrase_temporal_effect(row["assigned_phrase"], month_index, config=cfg)
 
-    mult *= EFFECTS_CONFIG["seasonal"][int(row["date"].split("-")[1])]
+    mult *= cfg["seasonal"][int(row["date"].split("-")[1])]
 
     return mult
 
 
-def apply_effect_model(df, rng, start_date="2023-01"):
+def apply_effect_model(df, rng, start_date="2023-01", config=None):
     """Apply the forward effect model to compute KPIs for each ad."""
+    cfg = config or EFFECTS_CONFIG
     start_month = int(start_date.split("-")[0]) * 12 + int(start_date.split("-")[1])
-    sigma = EFFECTS_CONFIG["noise_sigma"]
+    sigma = cfg["noise_sigma"]
 
     roas_list, ctr_list, conv_list = [], [], []
     for _, row in df.iterrows():
         ad_month = int(row["date"].split("-")[0]) * 12 + int(row["date"].split("-")[1])
         month_index = ad_month - start_month
 
-        roas_mult = compute_kpi_multiplier(row, month_index, "roas")
-        ctr_mult = compute_kpi_multiplier(row, month_index, "ctr")
-        conv_mult = compute_kpi_multiplier(row, month_index, "conv_rate")
+        roas_mult = compute_kpi_multiplier(row, month_index, "roas", config=cfg)
+        ctr_mult = compute_kpi_multiplier(row, month_index, "ctr", config=cfg)
+        conv_mult = compute_kpi_multiplier(row, month_index, "conv_rate", config=cfg)
 
         noise_r = rng.lognormal(0, sigma)
         noise_c = rng.lognormal(0, sigma)
         noise_v = rng.lognormal(0, sigma)
 
-        roas_list.append(EFFECTS_CONFIG["base_roas"] * roas_mult * noise_r)
-        ctr_list.append(EFFECTS_CONFIG["base_ctr"] * ctr_mult * noise_c)
-        conv_list.append(EFFECTS_CONFIG["base_conv_rate"] * conv_mult * noise_v)
+        roas_list.append(cfg["base_roas"] * roas_mult * noise_r)
+        ctr_list.append(cfg["base_ctr"] * ctr_mult * noise_c)
+        conv_list.append(cfg["base_conv_rate"] * conv_mult * noise_v)
 
     df["roas"] = roas_list
     df["ctr"] = ctr_list
@@ -294,9 +298,9 @@ def apply_effect_model(df, rng, start_date="2023-01"):
 # STEP 5 — Back out raw metrics
 # =============================================================================
 
-def compute_raw_metrics(df, rng):
+def compute_raw_metrics(df, rng, config=None):
     """Derive spend, revenue, impressions, clicks, purchases from KPIs."""
-    cfg = EFFECTS_CONFIG
+    cfg = config or EFFECTS_CONFIG
     n = len(df)
 
     spend_mu = np.log(cfg["spend_mean"]) - 0.5 * cfg["spend_sigma"] ** 2
@@ -360,9 +364,10 @@ def _insert_number(text, rng):
     return " ".join(words)
 
 
-def generate_copy(df, rng):
+def generate_copy(df, rng, config=None):
     """Generate headline, body, and labels column consistent with sampled flags."""
-    threshold = EFFECTS_CONFIG["body_long_threshold"]
+    cfg = config or EFFECTS_CONFIG
+    threshold = cfg["body_long_threshold"]
     headlines, bodies, labels_col = [], [], []
 
     for _, row in df.iterrows():
@@ -416,18 +421,50 @@ OUTPUT_COLUMNS = [
 ]
 
 
-def generate(n_ads, start, end, seed, out):
+def generate(n_ads, start, end, seed, out, config=None):
     """Full pipeline: sample → effect model → raw metrics → copy → CSV."""
+    cfg = config or EFFECTS_CONFIG
     rng = np.random.default_rng(seed)
     months = generate_month_list(start, end)
-    counts = generate_monthly_counts(n_ads, months, rng)
-    df = sample_attributes(counts, rng)
-    df = apply_effect_model(df, rng, start_date=start)
-    df = compute_raw_metrics(df, rng)
-    df = generate_copy(df, rng)
+    counts = generate_monthly_counts(n_ads, months, rng, config=cfg)
+    df = sample_attributes(counts, rng, config=cfg)
+    df = apply_effect_model(df, rng, start_date=start, config=cfg)
+    df = compute_raw_metrics(df, rng, config=cfg)
+    df = generate_copy(df, rng, config=cfg)
     df[OUTPUT_COLUMNS].to_csv(out, index=False)
     print(f"Wrote {len(df)} ads to {out}")
     return df
+
+
+def _build_flipped_config():
+    """Deep-copy EFFECTS_CONFIG with 3 dramatic sign reversals across all KPI tables."""
+    import copy
+    cfg = copy.deepcopy(EFFECTS_CONFIG)
+
+    flips = {
+        "roas_effects": {
+            "media_type": {"image": 0.75, "video": 1.50},
+            "headline_has_numbers": 0.70,
+            "body_long": 1.40,
+        },
+        "ctr_effects": {
+            "media_type": {"image": 0.88, "video": 1.15},
+            "headline_has_numbers": 0.85,
+            "body_long": 1.12,
+        },
+        "conv_rate_effects": {
+            "media_type": {"image": 0.85, "video": 1.18},
+            "headline_has_numbers": 0.82,
+            "body_long": 1.15,
+        },
+    }
+    for table, overrides in flips.items():
+        for key, value in overrides.items():
+            cfg[table][key] = value
+    return cfg
+
+
+FLIPPED_EFFECTS_CONFIG = _build_flipped_config()
 
 
 if __name__ == "__main__":
@@ -437,5 +474,7 @@ if __name__ == "__main__":
     parser.add_argument("--end", default="2025-01")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", default="ads.csv")
+    parser.add_argument("--config", choices=["default", "flipped"], default="default")
     args = parser.parse_args()
-    generate(args.n_ads, args.start, args.end, args.seed, args.out)
+    cfg = FLIPPED_EFFECTS_CONFIG if args.config == "flipped" else None
+    generate(args.n_ads, args.start, args.end, args.seed, args.out, config=cfg)
