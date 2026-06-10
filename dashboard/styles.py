@@ -352,7 +352,7 @@ h3 {
 
 .rec-action-tag {
   padding: 0.15rem 0.5rem;
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -371,7 +371,7 @@ h3 {
 
 .rec-priority {
   color: var(--dac-muted);
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -379,7 +379,7 @@ h3 {
 
 .rec-title {
   color: var(--dac-text);
-  font-size: 1rem;
+  font-size: 1.12rem;
   font-weight: 700;
   line-height: 1.35;
   margin-bottom: 0.3rem;
@@ -387,7 +387,7 @@ h3 {
 
 .rec-desc {
   color: var(--dac-muted);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   line-height: 1.5;
   margin-bottom: 0.65rem;
 }
@@ -407,7 +407,7 @@ h3 {
 
 .rec-stat-label {
   color: var(--dac-muted);
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -415,12 +415,12 @@ h3 {
 
 .rec-stat-value {
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 0.92rem;
+  font-size: 1.05rem;
   font-weight: 700;
 }
 
 .rec-quadrant-wrap {
-  flex: 0 0 200px;
+  flex: 0 0 240px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -432,8 +432,8 @@ h3 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
   gap: 4px;
-  width: 180px;
-  height: 140px;
+  width: 220px;
+  height: 170px;
 }
 
 .rec-qcell {
@@ -447,12 +447,12 @@ h3 {
 
 .rec-qcell-value {
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 0.82rem;
+  font-size: 1.05rem;
   font-weight: 700;
 }
 
 .rec-qcell-label {
-  font-size: 0.55rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--dac-muted);
   text-align: center;
@@ -462,14 +462,52 @@ h3 {
 .rec-quadrant-footer {
   margin-top: 0.3rem;
   color: var(--dac-muted);
-  font-size: 0.55rem;
+  font-size: 0.75rem;
   text-align: center;
 }
 
 .rec-counter {
   color: var(--dac-muted);
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   margin-bottom: 0.3rem;
+}
+
+[data-testid="stSidebar"] {
+  background: var(--dac-surface);
+  border-right: 1px solid var(--dac-border);
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] > div {
+  gap: 0.2rem;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] > div[role="radiogroup"] > label {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 0.85rem;
+  margin: 0;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+  background: rgba(91, 140, 255, 0.10);
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] label > div:first-child {
+  display: none;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has([aria-checked="true"]),
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked),
+[data-testid="stSidebar"] [data-testid="stRadio"] label.nav-active {
+  background: rgba(91, 140, 255, 0.15);
+  color: #5b8cff;
+  font-weight: 700;
 }
 
 hr {
@@ -510,6 +548,29 @@ hr {
 """
 
 
+NAV_HIGHLIGHT_JS = """
+<script>
+function highlightNav() {
+  const sidebar = document.querySelector('[data-testid="stSidebar"]');
+  if (!sidebar) return;
+  const labels = sidebar.querySelectorAll('[data-testid="stRadio"] label');
+  labels.forEach(label => {
+    const checked = label.querySelector('input:checked, [aria-checked="true"]');
+    if (checked) {
+      label.classList.add('nav-active');
+    } else {
+      label.classList.remove('nav-active');
+    }
+  });
+}
+const observer = new MutationObserver(highlightNav);
+observer.observe(document.body, {subtree: true, attributes: true, childList: true});
+highlightNav();
+</script>
+"""
+
+
 def apply_styles() -> None:
     """Inject the dashboard's scoped CSS theme."""
     st.markdown(APP_CSS, unsafe_allow_html=True)
+    st.markdown(NAV_HIGHLIGHT_JS, unsafe_allow_html=True)

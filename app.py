@@ -120,7 +120,7 @@ def render_global_controls(data: pd.DataFrame) -> pd.DataFrame:
     categories = sorted(data["category"].unique())
     media_types = sorted(data["media_type"].unique())
 
-    with st.container(border=True):
+    with st.expander("Filters", expanded=False):
         control_columns = st.columns([1, 2.2, 2, 1.5, 1, 0.8])
         with control_columns[0]:
             kpi = st.radio(
@@ -747,35 +747,36 @@ def render_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
 
 def render_loaded_state(data: pd.DataFrame) -> None:
     """Render the loaded-file header and global controls."""
-    header, action = st.columns([5, 1])
-    with header:
-        st.title("Ads Creative Component Performance")
-        st.caption(f"Loaded: {st.session_state['dataset_name']}")
-    with action:
-        st.write("")
+    with st.sidebar:
+        st.title("DAC")
+        st.caption(f"{st.session_state['dataset_name']}")
+        page = st.radio(
+            "Navigation",
+            ("Overview", "Details", "Insights", "Recommendations"),
+            label_visibility="collapsed",
+            key="sidebar_page",
+        )
+        st.divider()
         st.button(
             "Unload dataset",
             on_click=unload_dataset,
             width="stretch",
         )
 
+    st.title("Ads Creative Component Performance")
     filtered = render_global_controls(data)
     st.caption(f"{len(filtered):,} of {len(data):,} ads in view")
-    overview, details, insights_tab, recommendations_tab = st.tabs(
-        ("Overview", "Details", "Insights", "Recommendations"),
-    )
-    with overview:
-        render_overview(filtered, st.session_state["active_kpi"])
-    with details:
-        render_details(
-            filtered,
-            st.session_state["active_kpi"],
-            st.session_state["active_top_n"],
-        )
-    with insights_tab:
-        render_insights(filtered, st.session_state["active_kpi"])
-    with recommendations_tab:
-        render_recommendations(filtered, st.session_state["active_kpi"])
+
+    kpi = st.session_state["active_kpi"]
+    top_n = st.session_state["active_top_n"]
+    if page == "Overview":
+        render_overview(filtered, kpi)
+    elif page == "Details":
+        render_details(filtered, kpi, top_n)
+    elif page == "Insights":
+        render_insights(filtered, kpi)
+    else:
+        render_recommendations(filtered, kpi)
 
 
 def main() -> None:
