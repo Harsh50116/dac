@@ -31,7 +31,7 @@ from dashboard.charts import (
 )
 from dashboard.insights import generate_insights, group_by_category
 from dashboard.interactions import attribute_mask
-from dashboard.recommend import generate_recommendations
+from dashboard.recommend import generate_pair_recommendations, generate_recommendations
 from dashboard.data import DataValidationError, calendar_months, load_dataset
 from dashboard.significance_decay import significance_for_mask
 from dashboard.styles import apply_styles
@@ -614,84 +614,125 @@ def render_insights(data: pd.DataFrame, kpi: str) -> None:
 
 
 @st.cache_data(show_spinner="Generating recommendations…")
-def _cached_recommendations(
-    data: pd.DataFrame, kpi: str,
+def _cached_pair_recommendations(
+    data: pd.DataFrame, kpi: str, top_n: int,
 ) -> list:
-    return generate_recommendations(data, kpi)
+    return generate_pair_recommendations(data, kpi, top_n=top_n)
+
+
+def _quadrant_html(rec) -> str:
+    """Build the 2x2 quadrant grid for a pair recommendation."""
+    ab, a_only, b_only, neither = rec.cell_lifts
+    phrase_a = escape(rec.phrases[0])
+    phrase_b = escape(rec.phrases[1])
+
+    def _cell(value: float, label: str) -> str:
+        color = lift_color(value)
+        bg = f"rgba({_rgb_from_lift(value)}, 0.12)"
+        sign = "+" if value > 0 else ""
+        return (
+            f'<div class="rec-qcell" style="background:{bg}">'
+            f'<span class="rec-qcell-value" style="color:{color}">'
+            f"{sign}{value:.0f}%</span>"
+            f'<span class="rec-qcell-label">{escape(label)}</span>'
+            f"</div>"
+        )
+
+    both_cell = _cell(ab, "Both")
+    neither_cell = _cell(neither, "Neither")
+    return (
+        f'<div class="rec-quadrant">'
+        f'{_cell(a_only, phrase_a + " only")}'
+        f"{both_cell}"
+        f"{neither_cell}"
+        f'{_cell(b_only, phrase_b + " only")}'
+        f"</div>"
+        f'<div class="rec-quadrant-footer">KPI lift vs baseline (neither)</div>'
+    )
+
+
+def _rgb_from_lift(value: float) -> str:
+    """Extract RGB values from lift_color for use in rgba()."""
+    color = lift_color(value)
+    return color[4:-1]
+
+
+def _rec_card_html(rec, rank: int, kpi: str) -> str:
+    """Render one full-width recommendation card."""
+    action_cls = rec.action.replace("_", "-")
+    action_label = "DO MORE OF" if rec.action == "do_more" else "STOP"
+    ordinals = {1: "1st", 2: "2nd", 3: "3rd"}
+    priority = ordinals.get(rank, f"{rank}th")
+
+    lift_color_val = lift_color(rec.combined_lift)
+    synergy_color = lift_color(rec.synergy_score)
+    sign = "+" if rec.combined_lift > 0 else ""
+    syn_sign = "+" if rec.synergy_score > 0 else ""
+
+    return (
+        f'<div class="rec-card {action_cls}">'
+        f'<div class="rec-body">'
+        f'<div class="rec-header">'
+        f'<span class="rec-action-tag {action_cls}">{action_label}</span>'
+        f'<span class="rec-priority">{priority} priority</span>'
+        f"</div>"
+        f'<div class="rec-title">{escape(rec.title.capitalize())}</div>'
+        f'<div class="rec-desc">{escape(rec.description)}</div>'
+        f'<div class="rec-stats">'
+        f'<div class="rec-stat-item">'
+        f'<span class="rec-stat-label">Combined lift</span>'
+        f'<span class="rec-stat-value" style="color:{lift_color_val}">'
+        f"{sign}{rec.combined_lift:.0f}%</span>"
+        f"</div>"
+        f'<div class="rec-stat-item">'
+        f'<span class="rec-stat-label">Synergy</span>'
+        f'<span class="rec-stat-value" style="color:{synergy_color}">'
+        f"{syn_sign}{rec.synergy_score:.1f}%</span>"
+        f"</div>"
+        f'<div class="rec-stat-item">'
+        f'<span class="rec-stat-label">Headroom</span>'
+        f'<span class="rec-stat-value">{rec.headroom:.0f}%</span>'
+        f"</div>"
+        f'<div class="rec-stat-item">'
+        f'<span class="rec-stat-label">n (both)</span>'
+        f'<span class="rec-stat-value">{rec.n_both:,}</span>'
+        f"</div>"
+        f"</div>"
+        f"</div>"
+        f'<div class="rec-quadrant-wrap">'
+        f"{_quadrant_html(rec)}"
+        f"</div>"
+        f"</div>"
+    )
 
 
 def render_recommendations(data: pd.DataFrame, kpi: str) -> None:
-    """Render the Phase 3 Recommendations tab."""
+    """Render the Phase 3 Recommendations tab with pair-based cards."""
     if data.empty:
         st.warning("No ads match the selected global filters.")
         return
-    recs = _cached_recommendations(data, kpi)
+
+    top_n = 3
+    recs = _cached_pair_recommendations(data, kpi, top_n)
     if not recs:
         st.info("Not enough data to generate recommendations.")
         return
 
-    do_more = [r for r in recs if r.action == "do_more"]
-    avoid = [r for r in recs if r.action == "avoid"]
+    kpi_upper = kpi.upper()
+    st.subheader(f"Your next {len(recs)} moves")
+    st.markdown(
+        f'<div class="rec-counter">'
+        f"Showing top {len(recs)} pair-based recommendations for {kpi_upper}. "
+        f"Each card pairs two creative levers and shows their combined effect."
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
-    left, right = st.columns(2)
-    with left:
-        st.subheader("Do More Of")
-        st.caption(f"Durable, significant drivers of {kpi}")
-        for rec in do_more:
-            color = lift_color(rec.lift)
-            hypothesis = escape(rec.hypothesis)
-            tag = escape(rec.durability_tag)
-            synergy_html = ""
-            if rec.synergy_partner and rec.synergy_score is not None:
-                partner = escape(rec.synergy_partner)
-                synergy_html = (
-                    f'<div class="rec-synergy">Synergy with '
-                    f"{partner}: "
-                    f"{rec.synergy_score:+.1f}%</div>"
-                )
-            st.markdown(
-                f'<div class="rec-card do-more">'
-                f'<div class="rec-hypothesis">{hypothesis}</div>'
-                f'<div class="rec-evidence">'
-                f'<span class="rec-lift" style="color:{color}">'
-                f"+{rec.lift:.0f}%</span>"
-                f'<span class="rec-stat">p={rec.p_value:.4f}</span>'
-                f'<span class="rec-tag durable">{tag}</span>'
-                f'<span class="rec-n">n={rec.n:,}</span>'
-                f"</div>"
-                f"{synergy_html}"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-    with right:
-        st.subheader("Avoid")
-        st.caption(f"Durable, significant drains on {kpi}")
-        for rec in avoid:
-            color = lift_color(rec.lift)
-            hypothesis = escape(rec.hypothesis)
-            tag = escape(rec.durability_tag)
-            synergy_html = ""
-            if rec.synergy_partner and rec.synergy_score is not None:
-                partner = escape(rec.synergy_partner)
-                synergy_html = (
-                    f'<div class="rec-synergy">Synergy with '
-                    f"{partner}: "
-                    f"{rec.synergy_score:+.1f}%</div>"
-                )
-            st.markdown(
-                f'<div class="rec-card avoid">'
-                f'<div class="rec-hypothesis">{hypothesis}</div>'
-                f'<div class="rec-evidence">'
-                f'<span class="rec-lift" style="color:{color}">'
-                f"{rec.lift:.0f}%</span>"
-                f'<span class="rec-stat">p={rec.p_value:.4f}</span>'
-                f'<span class="rec-tag durable">{tag}</span>'
-                f'<span class="rec-n">n={rec.n:,}</span>'
-                f"</div>"
-                f"{synergy_html}"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+    for rank, rec in enumerate(recs, 1):
+        st.markdown(
+            _rec_card_html(rec, rank, kpi),
+            unsafe_allow_html=True,
+        )
 
 
 def render_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
