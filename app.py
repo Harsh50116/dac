@@ -230,7 +230,7 @@ def render_volume_chart(data: pd.DataFrame) -> None:
     """Render monthly ad volume and ROAS with chart-specific controls."""
     st.subheader("Ads Volume & Performance over Time")
     st.caption("Monthly volume with aggregated ROAS")
-    with st.expander("Controls", expanded=True):
+    with st.expander("Controls", expanded=False):
         columns = st.columns(5)
         bar_metric = columns[0].selectbox(
             "Bar metric",
@@ -280,7 +280,7 @@ def render_rolling_lift_chart(data: pd.DataFrame, kpi: str) -> None:
     """Render rolling lift for selected labels."""
     st.subheader("Rolling Lift (by Label)")
     st.caption(f"{kpi} lift versus ads without each label")
-    with st.expander("Controls", expanded=True):
+    with st.expander("Controls", expanded=False):
         columns = st.columns(4)
         selected_types = columns[0].multiselect(
             "Label type(s)",
@@ -340,7 +340,7 @@ def render_label_performance_chart(data: pd.DataFrame, kpi: str) -> None:
     """Render label volume and lift over time."""
     st.subheader("Label Performance over Time")
     st.caption("Volume present versus lift")
-    with st.expander("Controls", expanded=True):
+    with st.expander("Controls", expanded=False):
         columns = st.columns(3)
         selected_types = columns[0].multiselect(
             "Label type(s)",
@@ -385,11 +385,8 @@ def render_overview(data: pd.DataFrame, kpi: str) -> None:
         return
     render_kpi_cards(data)
     st.divider()
-    first, second = st.columns(2)
-    with first:
-        render_volume_chart(data)
-    with second:
-        render_rolling_lift_chart(data, kpi)
+    render_volume_chart(data)
+    render_rolling_lift_chart(data, kpi)
     render_label_performance_chart(data, kpi)
 
 
@@ -406,7 +403,7 @@ def render_label_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
     with circular:
         st.subheader("Circular Lift by Label")
         st.caption(f"Strongest {top_n} token lifts")
-        with st.expander("Controls", expanded=True):
+        with st.expander("Controls", expanded=False):
             circular_types = st.multiselect(
                 "Label type(s)",
                 LABEL_TYPES,
@@ -432,7 +429,7 @@ def render_label_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
     with cloud:
         st.subheader("Word Cloud")
         st.caption("Size = frequency · color = lift")
-        with st.expander("Controls", expanded=True):
+        with st.expander("Controls", expanded=False):
             cloud_types = st.multiselect(
                 "Label type(s)",
                 LABEL_TYPES,

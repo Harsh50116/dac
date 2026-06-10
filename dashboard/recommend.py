@@ -295,9 +295,12 @@ def _deduplicate_pairs(
     ranked: list[tuple[PairRecommendation, pd.Series]],
     top_n: int,
 ) -> list[PairRecommendation]:
-    """Keep top_n pairs whose combined masks don't overlap excessively."""
+    """Keep top_n pairs that don't share individual levers or overlap excessively."""
     kept: list[tuple[PairRecommendation, pd.Series]] = []
+    used_levers: set[str] = set()
     for rec, mask in ranked:
+        if rec.attributes[0] in used_levers or rec.attributes[1] in used_levers:
+            continue
         duplicate = False
         for _, prev_mask in kept:
             intersection = int((mask & prev_mask).sum())
@@ -307,6 +310,7 @@ def _deduplicate_pairs(
                 break
         if not duplicate:
             kept.append((rec, mask))
+            used_levers.update(rec.attributes)
         if len(kept) >= top_n:
             break
     return [r for r, _ in kept]
@@ -334,13 +338,13 @@ def _build_pair_description(
     b = phrase_b.lower()
     if action == "do_more":
         return (
-            f"Using {a} and {b} together lifts {kpi_upper} by "
-            f"{combined_lift:+.0f}% vs baseline — {synergy:+.1f}% beyond what "
-            f"either delivers alone. {headroom:.0f}% of spend hasn't tried "
-            f"this combination yet."
+            f"Historically, ads using {a} and {b} together showed "
+            f"{combined_lift:+.0f}% {kpi_upper} vs baseline — {synergy:+.1f}% beyond what "
+            f"either delivered alone. {headroom:.0f}% of spend hasn't tried "
+            f"this combination yet. Test this pairing in your next campaign."
         )
     return (
-        f"Combining {a} with {b} drags {kpi_upper} by "
+        f"Historically, combining {a} with {b} dragged {kpi_upper} by "
         f"{combined_lift:.0f}% vs baseline. {headroom:.0f}% of current spend "
-        f"uses this combination."
+        f"uses this combination. Test reducing this pairing."
     )
