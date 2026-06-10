@@ -9,8 +9,9 @@ __pycache__/
 venv/
 *.egg-info/
 
-# Generated output
+# Generated output — but keep bundled sample datasets
 *.csv
+!data/*.csv
 
 # OS
 .DS_Store
