@@ -29,9 +29,11 @@ from dashboard.charts import (
     volume_performance_chart,
     word_cloud_chart,
 )
+from dashboard.explain_panel import SEED_FOCUS, SEED_PAGE, open_explain
 from dashboard.insights import generate_insights, group_by_category
 from dashboard.interactions import attribute_mask
-from dashboard.recommend import generate_pair_recommendations, generate_recommendations
+from dashboard.llm_context import build_context, pair_rec_id
+from dashboard.recommend import generate_pair_recommendations
 from dashboard.data import DataValidationError, calendar_months, load_dataset
 from dashboard.significance_decay import significance_for_mask
 from dashboard.styles import apply_styles
@@ -187,6 +189,18 @@ def render_global_controls(data: pd.DataFrame) -> pd.DataFrame:
     st.session_state["active_kpi"] = kpi
     st.session_state["active_top_n"] = int(top_n)
     return filtered
+
+
+def _active_filter_summary() -> dict:
+    """Current global filters as a JSON-friendly dict for LLM grounding."""
+    period = st.session_state.get("filter_period")
+    return {
+        "period": (
+            [ts.strftime("%Y-%m") for ts in period] if period else "all"
+        ),
+        "categories": list(st.session_state.get("filter_categories") or []) or "all",
+        "media_types": list(st.session_state.get("filter_media") or []) or "all",
+    }
 
 
 def render_kpi_cards(data: pd.DataFrame) -> None:
@@ -572,7 +586,13 @@ def render_insights(data: pd.DataFrame, kpi: str) -> None:
         return
 
     kpi_upper = kpi.upper()
-    st.subheader(f"What moves {kpi_upper}")
+    header_cols = st.columns([5, 1], vertical_alignment="center")
+    with header_cols[0]:
+        st.subheader(f"What moves {kpi_upper}")
+    with header_cols[1]:
+        page_clicked = st.button(
+            "Explain", key="explain_insights_page", width="stretch",
+        )
     st.caption(
         f"Every creative lever ranked by its effect on {kpi_upper} versus "
         f"the account baseline. Bars read left (drains) to right (drivers); "
@@ -589,20 +609,25 @@ def render_insights(data: pd.DataFrame, kpi: str) -> None:
         unsafe_allow_html=True,
     )
 
-    for category in ("Format", "Aspect Ratio", "Ad Copy"):
+    section_slugs = {
+        "Format": "format",
+        "Aspect Ratio": "ratio",
+        "Ad Copy": "copy",
+        "Labels": "labels",
+    }
+    focused_section = None
+    for category in ("Format", "Aspect Ratio", "Ad Copy", "Labels"):
         if category not in groups:
             continue
         items = groups[category]
         html = f'<div class="insight-section-header">{escape(category)}</div>'
         for insight in items:
             html += _insight_bar_html(insight, max_abs_lift, kpi_upper)
-        st.markdown(html, unsafe_allow_html=True)
-
-    if "Labels" in groups:
-        html = '<div class="insight-section-header">Labels</div>'
-        for insight in groups["Labels"]:
-            html += _insight_bar_html(insight, max_abs_lift, kpi_upper)
-        st.markdown(html, unsafe_allow_html=True)
+        slug = section_slugs[category]
+        with st.container(key=f"insight_sec_{slug}"):
+            st.markdown(html, unsafe_allow_html=True)
+            if st.button("Explain", key=f"explain_sec_{slug}"):
+                focused_section = category
 
     st.markdown(
         f'<div class="insight-footnote">'
@@ -616,6 +641,48 @@ def render_insights(data: pd.DataFrame, kpi: str) -> None:
         f"</div>",
         unsafe_allow_html=True,
     )
+
+    if focused_section is None and not page_clicked:
+        return
+
+    context = build_context(
+        page="Insights",
+        kpi=kpi,
+        dataset_name=st.session_state.get("dataset_name", ""),
+        n_ads_in_view=len(data),
+        n_ads_total=len(st.session_state["dataset"]),
+        filters=_active_filter_summary(),
+        insight_groups=groups,
+    )
+    if focused_section is not None:
+        items = groups[focused_section]
+        open_explain(
+            target=f"insights_sec_{section_slugs[focused_section]}",
+            context=context,
+            seed_question=(
+                f"Explain the {focused_section} results: what do they "
+                f"show, how strong is the evidence, and what should I "
+                f"do next?"
+            ),
+            title=f"{focused_section} levers",
+            chips=[
+                ("KPI", kpi_upper, None),
+                ("Levers", str(len(items)), None),
+                ("Ads in view", f"{len(data):,}", None),
+            ],
+        )
+    else:
+        open_explain(
+            target="insights_page",
+            context=context,
+            seed_question=SEED_PAGE,
+            title=f"What moves {kpi_upper}",
+            chips=[
+                ("KPI", kpi_upper, None),
+                ("Levers", str(sum(len(v) for v in groups.values())), None),
+                ("Ads in view", f"{len(data):,}", None),
+            ],
+        )
 
 
 @st.cache_data(show_spinner="Generating recommendations…")
@@ -724,7 +791,13 @@ def render_recommendations(data: pd.DataFrame, kpi: str) -> None:
         return
 
     kpi_upper = kpi.upper()
-    st.subheader(f"Your next {len(recs)} moves")
+    header_cols = st.columns([5, 1], vertical_alignment="center")
+    with header_cols[0]:
+        st.subheader(f"Your next {len(recs)} moves")
+    with header_cols[1]:
+        page_clicked = st.button(
+            "Explain", key="explain_recs_page", width="stretch",
+        )
     st.markdown(
         f'<div class="rec-counter">'
         f"Showing top {len(recs)} pair-based recommendations for {kpi_upper}. "
@@ -733,10 +806,59 @@ def render_recommendations(data: pd.DataFrame, kpi: str) -> None:
         unsafe_allow_html=True,
     )
 
+    focused_rec = None
     for rank, rec in enumerate(recs, 1):
-        st.markdown(
-            _rec_card_html(rec, rank, kpi),
-            unsafe_allow_html=True,
+        with st.container(key=f"rec_wrap_{rank}"):
+            st.markdown(
+                _rec_card_html(rec, rank, kpi),
+                unsafe_allow_html=True,
+            )
+            if st.button("Explain", key=f"explain_rec_{rank}"):
+                focused_rec = rec
+
+    if focused_rec is None and not page_clicked:
+        return
+
+    focus_id = pair_rec_id(focused_rec) if focused_rec is not None else None
+    context = build_context(
+        page="Recommendations",
+        kpi=kpi,
+        dataset_name=st.session_state.get("dataset_name", ""),
+        n_ads_in_view=len(data),
+        n_ads_total=len(st.session_state["dataset"]),
+        filters=_active_filter_summary(),
+        pair_recs=recs,
+        focus_id=focus_id,
+    )
+    if focused_rec is not None:
+        rec = focused_rec
+        lift_sign = "+" if rec.combined_lift > 0 else ""
+        syn_sign = "+" if rec.synergy_score > 0 else ""
+        open_explain(
+            target=focus_id,
+            context=context,
+            seed_question=SEED_FOCUS,
+            title=rec.title.capitalize(),
+            chips=[
+                ("Combined lift", f"{lift_sign}{rec.combined_lift:.0f}%",
+                 lift_color(rec.combined_lift)),
+                ("Synergy", f"{syn_sign}{rec.synergy_score:.1f}%",
+                 lift_color(rec.synergy_score)),
+                ("Headroom", f"{rec.headroom:.0f}%", None),
+                ("n (both)", f"{rec.n_both:,}", None),
+            ],
+        )
+    else:
+        open_explain(
+            target="recs_page",
+            context=context,
+            seed_question=SEED_PAGE,
+            title=f"Your next {len(recs)} moves",
+            chips=[
+                ("KPI", kpi_upper, None),
+                ("Plays", str(len(recs)), None),
+                ("Ads in view", f"{len(data):,}", None),
+            ],
         )
 
 

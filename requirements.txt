@@ -5,3 +5,5 @@ numpy>=1.26,<3
 openpyxl>=3.1,<4
 pyarrow>=20,<21
 scipy>=1.11,<2
+requests>=2.31,<3
+python-dotenv>=1.0,<2

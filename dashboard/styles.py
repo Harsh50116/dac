@@ -521,6 +521,89 @@ hr {
   border-color: var(--dac-border) !important;
 }
 
+/* ---- Explain panel (right-side drawer) ---- */
+
+div[data-testid="stDialog"] div[role="dialog"] {
+  width: 75vw !important;
+  max-width: 75vw !important;
+  height: 100vh;
+  max-height: 100vh !important;
+  margin: 0 0 0 auto;
+  border-radius: 18px 0 0 18px;
+  background: var(--dac-surface);
+  border: 1px solid var(--dac-border);
+  border-right: none;
+}
+
+.explain-disclaimer {
+  font-size: 0.8rem;
+  color: var(--dac-muted);
+  border: 1px solid var(--dac-border);
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.6rem;
+  background: var(--dac-surface-2);
+}
+
+.explain-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0.2rem 0 0.5rem;
+}
+
+.explain-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+
+.explain-chip {
+  font-size: 0.8rem;
+  color: var(--dac-muted);
+  border: 1px solid var(--dac-border);
+  background: var(--dac-surface-2);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+}
+
+.explain-chip b {
+  margin-left: 0.35rem;
+}
+
+/* Explain buttons overlaid on the top-right of cards and sections */
+
+[class*="st-key-rec_wrap_"],
+[class*="st-key-insight_sec_"] {
+  position: relative;
+}
+
+[class*="st-key-rec_wrap_"] [data-testid="stElementContainer"]:has(button),
+[class*="st-key-insight_sec_"] [data-testid="stElementContainer"]:has(button) {
+  position: absolute;
+  right: 1.1rem;
+  z-index: 5;
+  width: auto;
+}
+
+[class*="st-key-rec_wrap_"] [data-testid="stElementContainer"]:has(button) {
+  top: 1rem;
+}
+
+[class*="st-key-insight_sec_"] [data-testid="stElementContainer"]:has(button) {
+  top: 1.4rem;
+}
+
+[class*="st-key-rec_wrap_"] .stButton button,
+[class*="st-key-insight_sec_"] .stButton button {
+  font-size: 0.8rem;
+  padding: 0.1rem 0.85rem;
+  min-height: 1.7rem;
+  background: rgba(91, 140, 255, 0.1);
+  border: 1px solid rgba(91, 140, 255, 0.35);
+  color: #cfe0ff;
+}
+
 @media (max-width: 1100px) {
   [data-testid="stHorizontalBlock"] {
     flex-wrap: wrap;
