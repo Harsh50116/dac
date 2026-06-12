@@ -59,7 +59,10 @@ h3 {
 }
 
 [data-testid="stMetric"] {
-  min-height: 116px;
+  min-height: 104px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding: 1rem 0.9rem;
   background: linear-gradient(145deg, rgba(24, 28, 35, 0.96), rgba(20, 23, 29, 0.92));
   border: 1px solid var(--dac-border);
@@ -68,7 +71,7 @@ h3 {
 }
 
 [data-testid="stMetricLabel"] {
-  min-height: 2.2rem;
+  min-height: 0;
   color: var(--dac-muted);
   font-size: 0.72rem;
   font-weight: 650;
@@ -78,11 +81,6 @@ h3 {
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: clamp(1.15rem, 1.55vw, 1.6rem);
   font-weight: 700;
-}
-
-.sparkline-wrap {
-  margin-top: -0.6rem;
-  line-height: 0;
 }
 
 [data-testid="stExpander"] {
@@ -569,6 +567,20 @@ div[data-testid="stDialog"] div[role="dialog"] {
 
 .explain-chip b {
   margin-left: 0.35rem;
+}
+
+[data-testid="stChatInput"] {
+  background: var(--dac-surface-2);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+}
+
+[data-testid="stChatInput"]:focus-within {
+  border-color: rgba(91, 140, 255, 0.65);
+}
+
+[data-testid="stChatInput"] textarea {
+  background: transparent;
 }
 
 /* Explain buttons overlaid on the top-right of cards and sections */

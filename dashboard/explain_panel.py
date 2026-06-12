@@ -21,12 +21,12 @@ DISCLAIMER = (
     "it never invents them."
 )
 SEED_FOCUS = (
-    "Explain this in plain language: what does it show, how strong is "
-    "the evidence, and what should I do next?"
+    "Explain this in plain language: what does it show, how does it "
+    "connect to the other findings, and what should I do next?"
 )
 SEED_PAGE = (
-    "Summarize these results in plain language: what matters most and "
-    "how strong is the evidence?"
+    "Summarize these results: what matters most, how do the findings "
+    "connect, and what should I do first?"
 )
 UNVERIFIED_NOTE = (
     "Note: these figures are not in the computed results and should be "
@@ -85,30 +85,36 @@ def _explain_dialog(
             unsafe_allow_html=True,
         )
 
-    if not messages:
-        seed_answer = _send(seed_question, context, messages, seed=True)
+    # All turns render into this fixed-height scrollable container so
+    # they always appear above the chat input and long conversations
+    # scroll inside the drawer instead of overflowing it.
+    conversation = st.container(height=500)
+    with conversation:
         if not messages:
-            # Failed seed isn't persisted, so reopening retries it.
-            with st.chat_message("assistant"):
-                st.markdown(seed_answer["content"])
+            seed_answer = _send(seed_question, context, messages, seed=True)
+            if not messages:
+                # Failed seed isn't persisted, so reopening retries it.
+                with st.chat_message("assistant"):
+                    st.markdown(seed_answer["content"])
 
-    for message in messages:
-        if message.get("seed"):
-            continue
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-            if message.get("caveat"):
-                st.caption(message["caveat"])
+        for message in messages:
+            if message.get("seed"):
+                continue
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                if message.get("caveat"):
+                    st.caption(message["caveat"])
 
     prompt = st.chat_input("Ask about a number on this page")
     if prompt:
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        answer = _send(prompt, context, messages)
-        with st.chat_message("assistant"):
-            st.markdown(answer["content"])
-            if answer.get("caveat"):
-                st.caption(answer["caveat"])
+        with conversation:
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            answer = _send(prompt, context, messages)
+            with st.chat_message("assistant"):
+                st.markdown(answer["content"])
+                if answer.get("caveat"):
+                    st.caption(answer["caveat"])
 
 
 def _send(

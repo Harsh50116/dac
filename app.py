@@ -25,7 +25,6 @@ from dashboard.charts import (
     lift_bar_chart,
     lift_color,
     rolling_lift_chart,
-    sparkline_svg,
     volume_performance_chart,
     word_cloud_chart,
 )
@@ -203,29 +202,33 @@ def _active_filter_summary() -> dict:
     }
 
 
+def _compact_number(value: float, prefix: str = "") -> str:
+    """Format large values as 526.4K / 2.1M so cards never truncate."""
+    if abs(value) >= 1_000_000_000:
+        return f"{prefix}{value / 1_000_000_000:.1f}B"
+    if abs(value) >= 1_000_000:
+        return f"{prefix}{value / 1_000_000:.1f}M"
+    if abs(value) >= 100_000:
+        return f"{prefix}{value / 1_000:.1f}K"
+    return f"{prefix}{value:,.0f}"
+
+
 def render_kpi_cards(data: pd.DataFrame) -> None:
-    """Render the seven Overview headline values with sparklines."""
+    """Render the seven Overview headline values."""
     summary = kpi_summary(data)
-    monthly = monthly_performance(data)
     cards = (
-        ("No. of Ads", f"{summary['ads']:,}", monthly["ads"]),
-        ("Total Amount Spent", f"${summary['spend']:,.0f}", monthly["spend"]),
-        ("Total Revenue", f"${summary['revenue']:,.0f}", monthly["revenue"]),
-        ("Total Impressions", f"{summary['impressions']:,.0f}", monthly["impressions"]),
-        ("Total Clicks", f"{summary['clicks']:,.0f}", monthly["clicks"]),
-        ("Total Purchases", f"{summary['purchases']:,.0f}", monthly["purchases"]),
-        ("Total ROAS", f"{summary['roas']:.2f}", monthly["roas"]),
+        ("No. of Ads", f"{summary['ads']:,}"),
+        ("Total Spend", _compact_number(summary["spend"], "$")),
+        ("Total Revenue", _compact_number(summary["revenue"], "$")),
+        ("Total Impressions", _compact_number(summary["impressions"])),
+        ("Total Clicks", _compact_number(summary["clicks"])),
+        ("Total Purchases", _compact_number(summary["purchases"])),
+        ("Total ROAS", f"{summary['roas']:.2f}"),
     )
     columns = st.columns(7)
-    for i, (column, (label, value, series)) in enumerate(zip(columns, cards)):
-        spark_values = series.tolist()
+    for column, (label, value) in zip(columns, cards):
         with column:
             st.metric(label, value)
-            st.markdown(
-                f'<div class="sparkline-wrap">'
-                f"{sparkline_svg(spark_values, '#888', idx=i)}</div>",
-                unsafe_allow_html=True,
-            )
 
 
 def label_options(data: pd.DataFrame, label_types: list[str]) -> list[str]:
@@ -477,21 +480,16 @@ def render_copy_details(data: pd.DataFrame, kpi: str) -> None:
         )
         st.plotly_chart(lift_bar_chart(aspect, "value"), width="stretch")
     with second:
-        st.markdown("#### Punctuation Performance")
-        if data["has_punctuation"].nunique() < 2:
-            st.info(
-                "Unavailable: the current dataset has no ads containing "
-                "headline or body punctuation (! or ?)."
-            )
-        else:
-            punctuation = binary_lift_table(data, "has_punctuation", kpi)
-            st.plotly_chart(
-                lift_bar_chart(punctuation, "value"),
-                width="stretch",
-            )
+        st.markdown("#### Body Text Over 50?")
+        st.plotly_chart(
+            lift_bar_chart(
+                binary_lift_table(data, "body_over_50", kpi),
+                "value",
+            ),
+            width="stretch",
+        )
 
     comparisons = (
-        ("Body Text Over 50?", "body_over_50"),
         ("Body Has Emojis?", "body_has_emoji"),
         ("Headline Has Numbers?", "headline_has_numbers"),
         ("Body Has Numbers?", "body_has_numbers"),
@@ -653,6 +651,7 @@ def render_insights(data: pd.DataFrame, kpi: str) -> None:
         n_ads_total=len(st.session_state["dataset"]),
         filters=_active_filter_summary(),
         insight_groups=groups,
+        pair_recs=_cached_pair_recommendations(data, kpi, 3),
     )
     if focused_section is not None:
         items = groups[focused_section]
@@ -661,8 +660,8 @@ def render_insights(data: pd.DataFrame, kpi: str) -> None:
             context=context,
             seed_question=(
                 f"Explain the {focused_section} results: what do they "
-                f"show, how strong is the evidence, and what should I "
-                f"do next?"
+                f"show, how do they connect to the other findings, and "
+                f"what should I do next?"
             ),
             title=f"{focused_section} levers",
             chips=[
@@ -820,6 +819,9 @@ def render_recommendations(data: pd.DataFrame, kpi: str) -> None:
         return
 
     focus_id = pair_rec_id(focused_rec) if focused_rec is not None else None
+    insight_groups, _ = _analyze_insights(
+        data, kpi, st.session_state.get("active_top_n", 30),
+    )
     context = build_context(
         page="Recommendations",
         kpi=kpi,
@@ -827,6 +829,7 @@ def render_recommendations(data: pd.DataFrame, kpi: str) -> None:
         n_ads_in_view=len(data),
         n_ads_total=len(st.session_state["dataset"]),
         filters=_active_filter_summary(),
+        insight_groups=insight_groups,
         pair_recs=recs,
         focus_id=focus_id,
     )
@@ -890,7 +893,7 @@ def render_loaded_state(data: pd.DataFrame) -> None:
             width="stretch",
         )
 
-    st.title("Ads Creative Component Performance")
+    st.title(page)
     filtered = render_global_controls(data)
     st.caption(f"{len(filtered):,} of {len(data):,} ads in view")
 
