@@ -529,8 +529,18 @@ div[data-testid="stDialog"] div[role="dialog"] {
 /* Shrink the conversation on short viewports so the header, chips, and
    chat input always fit inside the drawer (overrides the inline 500px). */
 div[data-testid="stDialog"] .st-key-explain_conversation {
-  height: min(500px, calc(100vh - 22rem)) !important;
-  min-height: 180px;
+  height: min(500px, calc(100vh - 25rem)) !important;
+  min-height: 140px;
+}
+
+/* Keep the chat input visible at the drawer's bottom even when the
+   content above it outgrows the viewport. */
+div[data-testid="stDialog"] [data-testid="stElementContainer"]:has([data-testid="stChatInput"]) {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--dac-surface);
+  padding: 0.4rem 0 0.2rem;
 }
 
 .explain-disclaimer {
