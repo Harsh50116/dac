@@ -236,44 +236,6 @@ def word_cloud_chart(data: pd.DataFrame) -> go.Figure:
     return figure
 
 
-def sparkline_svg(
-    data: list[float],
-    color: str = GREEN,
-    width: int = 120,
-    height: int = 28,
-    idx: int = 0,
-) -> str:
-    """Return a minimal SVG area sparkline for KPI cards."""
-    vals = [v for v in data if v is not None and pd.notna(v)]
-    if len(vals) < 2:
-        return ""
-    mn, mx = min(vals), max(vals)
-    rng = mx - mn or 1
-    pts = []
-    for i, v in enumerate(data):
-        xp = i / (len(data) - 1) * width
-        safe = v if (v is not None and pd.notna(v)) else mn
-        yp = height - 3 - (safe - mn) / rng * (height - 6)
-        pts.append((xp, yp))
-    line = " ".join(
-        f"{'M' if i == 0 else 'L'}{p[0]:.1f} {p[1]:.1f}"
-        for i, p in enumerate(pts)
-    )
-    area = f"{line} L{width} {height} L0 {height} Z"
-    gid = f"sp{idx}"
-    return (
-        f'<svg width="100%" height="28" viewBox="0 0 {width} {height}"'
-        f' preserveAspectRatio="none" style="display:block">'
-        f'<defs><linearGradient id="{gid}" x1="0" y1="0" x2="0" y2="1">'
-        f'<stop offset="0" stop-color="{color}" stop-opacity="0.22"/>'
-        f'<stop offset="1" stop-color="{color}" stop-opacity="0"/>'
-        f'</linearGradient></defs>'
-        f'<path d="{area}" fill="url(#{gid})"/>'
-        f'<path d="{line}" fill="none" stroke="{color}" stroke-width="1.6"/>'
-        f'</svg>'
-    )
-
-
 def _apply_layout(figure: go.Figure, x_title: str) -> None:
     figure.update_layout(
         height=380,

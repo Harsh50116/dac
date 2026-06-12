@@ -1,8 +1,17 @@
-# DAC Phase 1 Dashboard
+# DAC — Ads Creative Component Performance
 
-DAC is a marketing decision-support project. Phase 1 reproduces the existing
-Ads Creative Component Performance dashboard using controlled synthetic data
-with known, learnable performance patterns.
+DAC is a marketing decision-support project: a Streamlit dashboard that
+analyzes ad creative component performance. Four pages:
+
+- **Overview** — KPI cards, volume/ROAS trend, rolling lift, label performance
+- **Details** — lift by label type, circular chart, word cloud, copy comparisons
+- **Insights** — every creative lever ranked by its effect on the selected KPI
+- **Recommendations** — pair-based plays (two levers + their quadrant interaction)
+
+Insights and Recommendations include an **Explain** panel: an LLM layer that
+answers questions about the computed results. It is a translator, not a
+calculator — it only cites figures from the analytics layer, frames pair
+recommendations as exploratory, and never asserts cause.
 
 ## Run locally
 
@@ -13,6 +22,18 @@ python3 -m streamlit run app.py
 
 Open `http://localhost:8501`, then upload a supported dataset or select
 **Load sample creative dataset**.
+
+### Explain panel setup (optional)
+
+The Explain feature calls Hyperbolic (Llama 3.3 70B). Create a `.env` file
+in the project root:
+
+```text
+HYPERBOLIC_KEY=<your key>
+```
+
+Without a key the dashboard works fully; Explain answers degrade to
+"explanation unavailable."
 
 ## Supported data
 
@@ -49,6 +70,13 @@ data/ads-monthly_v1_2026-06-06_2023-01_2025-01.csv
 ```bash
 python3 -m unittest discover -s tests -v
 python3 validate.py data/ads-monthly_v1_2026-06-06_2023-01_2025-01.csv
+```
+
+To check the Explain guardrails after a prompt or model change (live API
+calls, requires `HYPERBOLIC_KEY`):
+
+```bash
+python3 eval_explain.py
 ```
 
 The implementation follows the constraints in `CLAUDE.md`.

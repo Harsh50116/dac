@@ -21,42 +21,39 @@ class AppStateTests(unittest.TestCase):
         )
         self.assertEqual(
             self.app.button[0].label,
-            "Load sample creative dataset",
+            "Load sample dataset 1",
         )
-        self.assertEqual(len(self.app.radio), 0)
 
     def test_sample_data_loads_global_controls(self):
         self.app.button[0].click().run()
 
         self.assertEqual(len(self.app.exception), 0)
-        self.assertIn(
-            "ads-monthly_v1_2026-06-06_2023-01_2025-01.csv",
-            self.app.caption[0].value,
-        )
-        self.assertEqual(self.app.radio[0].value, "ROAS")
-        self.assertEqual(self.app.number_input[0].value, 30)
-        self.assertGreaterEqual(len(self.app.multiselect), 2)
-        self.assertIn("2,650 of 2,650 ads in view", self.app.caption[1].value)
-        self.assertEqual(len(self.app.tabs), 4)
-        self.assertEqual(len(self.app.metric), 7)
-        self.assertEqual(self.app.metric[0].value, "2,650")
-        self.assertEqual(len(self.app.get("plotly_chart")), 11)
         self.assertTrue(
             any(
-                "Unavailable" in info.value
-                for info in self.app.info
+                "ads-monthly_v1_2026-06-06_2023-01_2025-01.csv" in c.value
+                for c in self.app.caption
             )
         )
+        self.assertEqual(self.app.radio(key="sidebar_page").value, "Overview")
+        self.assertEqual(self.app.radio(key="filter_kpi").value, "ROAS")
+        self.assertEqual(self.app.number_input[0].value, 30)
+        self.assertGreaterEqual(len(self.app.multiselect), 2)
+        self.assertTrue(
+            any("2,650 of 2,650 ads in view" in c.value for c in self.app.caption)
+        )
+        self.assertEqual(len(self.app.metric), 7)
+        self.assertEqual(self.app.metric[0].value, "2,650")
+        self.assertGreaterEqual(len(self.app.get("plotly_chart")), 3)
 
     def test_global_filters_update_ads_in_view(self):
         self.app.button[0].click().run()
         self.app.multiselect[0].set_value(["mountain"]).run()
         self.app.multiselect[1].set_value(["image"]).run()
-        self.app.radio[0].set_value("CTR").run()
+        self.app.radio(key="filter_kpi").set_value("CTR").run()
         self.app.number_input[0].set_value(20).run()
 
         self.assertEqual(len(self.app.exception), 0)
-        self.assertEqual(self.app.radio[0].value, "CTR")
+        self.assertEqual(self.app.radio(key="filter_kpi").value, "CTR")
         self.assertEqual(self.app.number_input[0].value, 20)
         view_caption = next(
             caption.value
@@ -79,7 +76,7 @@ class AppStateTests(unittest.TestCase):
         self.assertEqual(len(self.app.radio), 0)
         self.assertEqual(
             self.app.button[0].label,
-            "Load sample creative dataset",
+            "Load sample dataset 1",
         )
 
 

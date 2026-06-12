@@ -25,20 +25,24 @@ from dashboard.charts import (
     lift_bar_chart,
     lift_color,
     rolling_lift_chart,
-    sparkline_svg,
     volume_performance_chart,
     word_cloud_chart,
 )
-from dashboard.insights import generate_insights
-from dashboard.recommend import generate_recommendations
+from dashboard.explain_panel import SEED_FOCUS, SEED_PAGE, open_explain
+from dashboard.insights import generate_insights, group_by_category
+from dashboard.interactions import attribute_mask
+from dashboard.llm_context import build_context, pair_rec_id
+from dashboard.recommend import generate_pair_recommendations
 from dashboard.data import DataValidationError, calendar_months, load_dataset
+from dashboard.significance_decay import significance_for_mask
 from dashboard.styles import apply_styles
 
 
-SAMPLE_DATA = (
-    Path(__file__).parent
-    / "data"
-    / "ads-monthly_v1_2026-06-06_2023-01_2025-01.csv"
+_DATA_DIR = Path(__file__).parent / "data"
+SAMPLE_DATASETS = (
+    ("Load sample dataset 1", _DATA_DIR / "ads-monthly_v1_2026-06-06_2023-01_2025-01.csv"),
+    ("Load sample dataset 2", _DATA_DIR / "ads_seed42.csv"),
+    ("Load sample dataset 3", _DATA_DIR / "ads_flipped.csv"),
 )
 FILTER_KEYS = (
     "filter_kpi",
@@ -66,9 +70,11 @@ def unload_dataset() -> None:
         st.session_state.pop(key, None)
 
 
-def load_sample() -> None:
-    """Load the bundled Phase 1 dataset."""
-    set_dataset(load_dataset(SAMPLE_DATA), SAMPLE_DATA.name)
+def _make_loader(path: Path):
+    """Return a callback that loads the given sample dataset."""
+    def _load():
+        set_dataset(load_dataset(path), path.name)
+    return _load
 
 
 def reset_filters(months: pd.DatetimeIndex) -> None:
@@ -102,14 +108,19 @@ def render_upload_state() -> None:
             set_dataset(load_dataset(uploaded), uploaded.name)
         except DataValidationError as error:
             st.error(str(error))
+            st.info("Try one of the sample datasets below to explore the dashboard.")
         else:
             st.rerun()
 
-    st.button(
-        "Load sample creative dataset",
-        type="primary",
-        on_click=load_sample,
-    )
+    cols = st.columns(len(SAMPLE_DATASETS))
+    for col, (label, path) in zip(cols, SAMPLE_DATASETS):
+        with col:
+            st.button(
+                label,
+                type="primary",
+                on_click=_make_loader(path),
+                use_container_width=True,
+            )
 
 
 def render_global_controls(data: pd.DataFrame) -> pd.DataFrame:
@@ -118,7 +129,7 @@ def render_global_controls(data: pd.DataFrame) -> pd.DataFrame:
     categories = sorted(data["category"].unique())
     media_types = sorted(data["media_type"].unique())
 
-    with st.container(border=True):
+    with st.expander("Filters", expanded=False):
         control_columns = st.columns([1, 2.2, 2, 1.5, 1, 0.8])
         with control_columns[0]:
             kpi = st.radio(
@@ -179,29 +190,45 @@ def render_global_controls(data: pd.DataFrame) -> pd.DataFrame:
     return filtered
 
 
+def _active_filter_summary() -> dict:
+    """Current global filters as a JSON-friendly dict for LLM grounding."""
+    period = st.session_state.get("filter_period")
+    return {
+        "period": (
+            [ts.strftime("%Y-%m") for ts in period] if period else "all"
+        ),
+        "categories": list(st.session_state.get("filter_categories") or []) or "all",
+        "media_types": list(st.session_state.get("filter_media") or []) or "all",
+    }
+
+
+def _compact_number(value: float, prefix: str = "") -> str:
+    """Format large values as 526.4K / 2.1M so cards never truncate."""
+    if abs(value) >= 1_000_000_000:
+        return f"{prefix}{value / 1_000_000_000:.1f}B"
+    if abs(value) >= 1_000_000:
+        return f"{prefix}{value / 1_000_000:.1f}M"
+    if abs(value) >= 100_000:
+        return f"{prefix}{value / 1_000:.1f}K"
+    return f"{prefix}{value:,.0f}"
+
+
 def render_kpi_cards(data: pd.DataFrame) -> None:
-    """Render the seven Overview headline values with sparklines."""
+    """Render the seven Overview headline values."""
     summary = kpi_summary(data)
-    monthly = monthly_performance(data)
     cards = (
-        ("No. of Ads", f"{summary['ads']:,}", monthly["ads"]),
-        ("Total Amount Spent", f"${summary['spend']:,.0f}", monthly["spend"]),
-        ("Total Revenue", f"${summary['revenue']:,.0f}", monthly["revenue"]),
-        ("Total Impressions", f"{summary['impressions']:,.0f}", monthly["impressions"]),
-        ("Total Clicks", f"{summary['clicks']:,.0f}", monthly["clicks"]),
-        ("Total Purchases", f"{summary['purchases']:,.0f}", monthly["purchases"]),
-        ("Total ROAS", f"{summary['roas']:.2f}", monthly["roas"]),
+        ("No. of Ads", f"{summary['ads']:,}"),
+        ("Total Spend", _compact_number(summary["spend"], "$")),
+        ("Total Revenue", _compact_number(summary["revenue"], "$")),
+        ("Total Impressions", _compact_number(summary["impressions"])),
+        ("Total Clicks", _compact_number(summary["clicks"])),
+        ("Total Purchases", _compact_number(summary["purchases"])),
+        ("Total ROAS", f"{summary['roas']:.2f}"),
     )
     columns = st.columns(7)
-    for i, (column, (label, value, series)) in enumerate(zip(columns, cards)):
-        spark_values = series.tolist()
+    for column, (label, value) in zip(columns, cards):
         with column:
             st.metric(label, value)
-            st.markdown(
-                f'<div class="sparkline-wrap">'
-                f"{sparkline_svg(spark_values, '#888', idx=i)}</div>",
-                unsafe_allow_html=True,
-            )
 
 
 def label_options(data: pd.DataFrame, label_types: list[str]) -> list[str]:
@@ -220,7 +247,7 @@ def render_volume_chart(data: pd.DataFrame) -> None:
     """Render monthly ad volume and ROAS with chart-specific controls."""
     st.subheader("Ads Volume & Performance over Time")
     st.caption("Monthly volume with aggregated ROAS")
-    with st.expander("Controls", expanded=True):
+    with st.expander("Controls", expanded=False):
         columns = st.columns(5)
         bar_metric = columns[0].selectbox(
             "Bar metric",
@@ -270,7 +297,7 @@ def render_rolling_lift_chart(data: pd.DataFrame, kpi: str) -> None:
     """Render rolling lift for selected labels."""
     st.subheader("Rolling Lift (by Label)")
     st.caption(f"{kpi} lift versus ads without each label")
-    with st.expander("Controls", expanded=True):
+    with st.expander("Controls", expanded=False):
         columns = st.columns(4)
         selected_types = columns[0].multiselect(
             "Label type(s)",
@@ -330,7 +357,7 @@ def render_label_performance_chart(data: pd.DataFrame, kpi: str) -> None:
     """Render label volume and lift over time."""
     st.subheader("Label Performance over Time")
     st.caption("Volume present versus lift")
-    with st.expander("Controls", expanded=True):
+    with st.expander("Controls", expanded=False):
         columns = st.columns(3)
         selected_types = columns[0].multiselect(
             "Label type(s)",
@@ -375,11 +402,8 @@ def render_overview(data: pd.DataFrame, kpi: str) -> None:
         return
     render_kpi_cards(data)
     st.divider()
-    first, second = st.columns(2)
-    with first:
-        render_volume_chart(data)
-    with second:
-        render_rolling_lift_chart(data, kpi)
+    render_volume_chart(data)
+    render_rolling_lift_chart(data, kpi)
     render_label_performance_chart(data, kpi)
 
 
@@ -396,7 +420,7 @@ def render_label_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
     with circular:
         st.subheader("Circular Lift by Label")
         st.caption(f"Strongest {top_n} token lifts")
-        with st.expander("Controls", expanded=True):
+        with st.expander("Controls", expanded=False):
             circular_types = st.multiselect(
                 "Label type(s)",
                 LABEL_TYPES,
@@ -422,7 +446,7 @@ def render_label_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
     with cloud:
         st.subheader("Word Cloud")
         st.caption("Size = frequency · color = lift")
-        with st.expander("Controls", expanded=True):
+        with st.expander("Controls", expanded=False):
             cloud_types = st.multiselect(
                 "Label type(s)",
                 LABEL_TYPES,
@@ -456,21 +480,16 @@ def render_copy_details(data: pd.DataFrame, kpi: str) -> None:
         )
         st.plotly_chart(lift_bar_chart(aspect, "value"), width="stretch")
     with second:
-        st.markdown("#### Punctuation Performance")
-        if data["has_punctuation"].nunique() < 2:
-            st.info(
-                "Unavailable: the current dataset has no ads containing "
-                "headline or body punctuation (! or ?)."
-            )
-        else:
-            punctuation = binary_lift_table(data, "has_punctuation", kpi)
-            st.plotly_chart(
-                lift_bar_chart(punctuation, "value"),
-                width="stretch",
-            )
+        st.markdown("#### Body Text Over 50?")
+        st.plotly_chart(
+            lift_bar_chart(
+                binary_lift_table(data, "body_over_50", kpi),
+                "value",
+            ),
+            width="stretch",
+        )
 
     comparisons = (
-        ("Body Text Over 50?", "body_over_50"),
         ("Body Has Emojis?", "body_has_emoji"),
         ("Headline Has Numbers?", "headline_has_numbers"),
         ("Body Has Numbers?", "body_has_numbers"),
@@ -493,139 +512,357 @@ def render_copy_details(data: pd.DataFrame, kpi: str) -> None:
                 )
 
 
+def _insight_bar_html(
+    insight, max_abs_lift: float, kpi_upper: str,
+) -> str:
+    """Render one horizontal bar row matching the mockup layout."""
+    phrase = escape(insight.phrase)
+    color = lift_color(insight.lift)
+    sign = "+" if insight.lift > 0 else ""
+    thin = '<span class="insight-thin">thin</span>' if insight.n < 200 else ""
+
+    pct = abs(insight.lift) / max_abs_lift * 45 if max_abs_lift else 0
+    if insight.lift >= 0:
+        bar_style = f"left:50%;width:{pct:.1f}%;background:{color};"
+    else:
+        bar_style = f"right:50%;width:{pct:.1f}%;background:{color};"
+
+    return (
+        f'<div class="insight-bar-row">'
+        f'<span class="insight-bar-label">{phrase}{thin}</span>'
+        f'<div class="insight-bar-track">'
+        f'<div class="insight-bar-fill" style="{bar_style}"></div>'
+        f"</div>"
+        f'<span class="insight-bar-stats" style="color:{color}">'
+        f"{sign}{insight.lift:.0f}%"
+        f'<span class="insight-bar-n">n={insight.n:,}</span>'
+        f"</span>"
+        f"</div>"
+    )
+
+
+@st.cache_data(show_spinner="Analyzing insights…")
+def _analyze_insights(
+    data: pd.DataFrame, kpi: str, top_n_labels: int,
+) -> tuple[dict, float]:
+    """Group insights by category; filter labels by significance + n >= 150 + top_n."""
+    insights = generate_insights(data, kpi, top_n_labels=top_n_labels)
+    if not insights:
+        return {}, 0.0
+
+    groups = group_by_category(insights)
+    max_abs_lift = max(abs(i.lift) for i in insights)
+
+    if "Labels" in groups:
+        filtered = []
+        for insight in groups["Labels"]:
+            if insight.n < 150:
+                continue
+            mask = attribute_mask(data, insight.key)
+            sig = significance_for_mask(data, mask, kpi)
+            if sig.significant:
+                filtered.append(insight)
+        filtered.sort(key=lambda i: abs(i.lift), reverse=True)
+        if filtered:
+            groups["Labels"] = filtered[:top_n_labels]
+        else:
+            del groups["Labels"]
+
+    return groups, max_abs_lift
+
+
 def render_insights(data: pd.DataFrame, kpi: str) -> None:
-    """Render the Phase 2 Insights tab."""
+    """Render the Insights tab with grouped horizontal bars by category."""
     if data.empty:
         st.warning("No ads match the selected global filters.")
         return
-    insights = generate_insights(data, kpi)
-    if not insights:
+
+    top_n = st.session_state.get("active_top_n", 30)
+    groups, max_abs_lift = _analyze_insights(data, kpi, top_n)
+    if not groups:
         st.info("Not enough data to generate insights.")
         return
 
-    drivers = [i for i in insights if i.lift > 0]
-    drains = [i for i in insights if i.lift < 0]
+    kpi_upper = kpi.upper()
+    header_cols = st.columns([5, 1], vertical_alignment="center")
+    with header_cols[0]:
+        st.subheader(f"What moves {kpi_upper}")
+    with header_cols[1]:
+        page_clicked = st.button(
+            "Inspect", key="explain_insights_page", width="stretch",
+        )
+    st.caption(
+        f"Every creative lever ranked by its effect on {kpi_upper} versus "
+        f"the account baseline. Bars read left (drains) to right (drivers); "
+        f"width is magnitude."
+    )
+    st.markdown(
+        f'<div class="insight-legend">'
+        f'<span class="insight-legend-dot" style="background:#e5533f;"></span>'
+        f"Drains {kpi_upper}"
+        f"&nbsp;&nbsp;← 0% →&nbsp;&nbsp;"
+        f'<span class="insight-legend-dot" style="background:#34c77b;"></span>'
+        f"Lifts {kpi_upper}"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
-    left, right = st.columns(2)
-    with left:
-        st.subheader("Top Drivers")
-        st.caption(f"Creative attributes that increase {kpi}")
-        for rank, insight in enumerate(drivers, 1):
-            color = lift_color(insight.lift)
-            phrase = escape(insight.phrase)
-            conf = escape(insight.confidence)
-            st.markdown(
-                f'<div class="insight-row">'
-                f'<span class="insight-rank">#{rank}</span>'
-                f'<span class="insight-phrase">{phrase}</span>'
-                f'<span class="insight-lift" style="color:{color}">'
-                f"+{insight.lift:.0f}%</span>"
-                f'<span class="insight-n">n={insight.n:,}</span>'
-                f'<span class="insight-conf {conf}">'
-                f"{conf}</span>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-    with right:
-        st.subheader("Top Drains")
-        st.caption(f"Creative attributes that decrease {kpi}")
-        for rank, insight in enumerate(drains, 1):
-            color = lift_color(insight.lift)
-            phrase = escape(insight.phrase)
-            conf = escape(insight.confidence)
-            st.markdown(
-                f'<div class="insight-row">'
-                f'<span class="insight-rank">#{rank}</span>'
-                f'<span class="insight-phrase">{phrase}</span>'
-                f'<span class="insight-lift" style="color:{color}">'
-                f"{insight.lift:.0f}%</span>"
-                f'<span class="insight-n">n={insight.n:,}</span>'
-                f'<span class="insight-conf {conf}">'
-                f"{conf}</span>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+    section_slugs = {
+        "Format": "format",
+        "Aspect Ratio": "ratio",
+        "Ad Copy": "copy",
+        "Labels": "labels",
+    }
+    focused_section = None
+    for category in ("Format", "Aspect Ratio", "Ad Copy", "Labels"):
+        if category not in groups:
+            continue
+        items = groups[category]
+        html = f'<div class="insight-section-header">{escape(category)}</div>'
+        for insight in items:
+            html += _insight_bar_html(insight, max_abs_lift, kpi_upper)
+        slug = section_slugs[category]
+        with st.container(key=f"insight_sec_{slug}"):
+            st.markdown(html, unsafe_allow_html=True)
+            if st.button(":material/open_in_new:", key=f"explain_sec_{slug}"):
+                focused_section = category
+
+    st.markdown(
+        f'<div class="insight-footnote">'
+        f"Lift is computed per lever against the filtered universe, not "
+        f"against each other — so percentages don't sum. "
+        f"<b>n</b> is the number of ads carrying that attribute. "
+        f"Labels require statistical significance (p&lt;0.05) and "
+        f"n≥150 to appear. "
+        f'Levers with n&lt;200 are flagged <span class="insight-thin">thin</span> '
+        f"and should be read as directional, not conclusive."
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    if focused_section is None and not page_clicked:
+        return
+
+    context = build_context(
+        page="Insights",
+        kpi=kpi,
+        dataset_name=st.session_state.get("dataset_name", ""),
+        n_ads_in_view=len(data),
+        n_ads_total=len(st.session_state["dataset"]),
+        filters=_active_filter_summary(),
+        insight_groups=groups,
+        pair_recs=_cached_pair_recommendations(data, kpi, 3),
+    )
+    if focused_section is not None:
+        items = groups[focused_section]
+        open_explain(
+            target=f"insights_sec_{section_slugs[focused_section]}",
+            context=context,
+            seed_question=(
+                f"Explain the {focused_section} results: what do they "
+                f"show, how do they connect to the other findings, and "
+                f"what should I do next?"
+            ),
+            title=f"{focused_section} levers",
+            chips=[
+                ("KPI", kpi_upper, None),
+                ("Levers", str(len(items)), None),
+                ("Ads in view", f"{len(data):,}", None),
+            ],
+        )
+    else:
+        open_explain(
+            target="insights_page",
+            context=context,
+            seed_question=SEED_PAGE,
+            title=f"What moves {kpi_upper}",
+            chips=[
+                ("KPI", kpi_upper, None),
+                ("Levers", str(sum(len(v) for v in groups.values())), None),
+                ("Ads in view", f"{len(data):,}", None),
+            ],
+        )
 
 
 @st.cache_data(show_spinner="Generating recommendations…")
-def _cached_recommendations(
-    data: pd.DataFrame, kpi: str,
+def _cached_pair_recommendations(
+    data: pd.DataFrame, kpi: str, top_n: int,
 ) -> list:
-    return generate_recommendations(data, kpi)
+    return generate_pair_recommendations(data, kpi, top_n=top_n)
+
+
+def _quadrant_html(rec) -> str:
+    """Build the 2x2 quadrant grid for a pair recommendation."""
+    ab, a_only, b_only, neither = rec.cell_lifts
+    phrase_a = escape(rec.phrases[0])
+    phrase_b = escape(rec.phrases[1])
+
+    def _cell(value: float, label: str) -> str:
+        color = lift_color(value)
+        bg = f"rgba({_rgb_from_lift(value)}, 0.12)"
+        sign = "+" if value > 0 else ""
+        return (
+            f'<div class="rec-qcell" style="background:{bg}">'
+            f'<span class="rec-qcell-value" style="color:{color}">'
+            f"{sign}{value:.0f}%</span>"
+            f'<span class="rec-qcell-label">{escape(label)}</span>'
+            f"</div>"
+        )
+
+    both_cell = _cell(ab, "Both")
+    neither_cell = _cell(neither, "Neither")
+    return (
+        f'<div class="rec-quadrant">'
+        f'{_cell(a_only, phrase_a + " only")}'
+        f"{both_cell}"
+        f"{neither_cell}"
+        f'{_cell(b_only, phrase_b + " only")}'
+        f"</div>"
+        f'<div class="rec-quadrant-footer">KPI lift vs baseline (neither)</div>'
+    )
+
+
+def _rgb_from_lift(value: float) -> str:
+    """Extract RGB values from lift_color for use in rgba()."""
+    color = lift_color(value)
+    return color[4:-1]
+
+
+def _rec_card_html(rec, rank: int, kpi: str) -> str:
+    """Render one full-width recommendation card."""
+    action_cls = rec.action.replace("_", "-")
+    action_label = "DO MORE OF" if rec.action == "do_more" else "STOP"
+    ordinals = {1: "1st", 2: "2nd", 3: "3rd"}
+    priority = ordinals.get(rank, f"{rank}th")
+
+    lift_color_val = lift_color(rec.combined_lift)
+    synergy_color = lift_color(rec.synergy_score)
+    sign = "+" if rec.combined_lift > 0 else ""
+    syn_sign = "+" if rec.synergy_score > 0 else ""
+
+    return (
+        f'<div class="rec-card {action_cls}">'
+        f'<div class="rec-body">'
+        f'<div class="rec-header">'
+        f'<span class="rec-action-tag {action_cls}">{action_label}</span>'
+        f'<span class="rec-priority">{priority} priority</span>'
+        f"</div>"
+        f'<div class="rec-title">{escape(rec.title.capitalize())}</div>'
+        f'<div class="rec-desc">{escape(rec.description)}</div>'
+        f'<div class="rec-stats">'
+        f'<div class="rec-stat-item">'
+        f'<span class="rec-stat-label">Combined lift</span>'
+        f'<span class="rec-stat-value" style="color:{lift_color_val}">'
+        f"{sign}{rec.combined_lift:.0f}%</span>"
+        f"</div>"
+        f'<div class="rec-stat-item">'
+        f'<span class="rec-stat-label">Synergy</span>'
+        f'<span class="rec-stat-value" style="color:{synergy_color}">'
+        f"{syn_sign}{rec.synergy_score:.1f}%</span>"
+        f"</div>"
+        f'<div class="rec-stat-item">'
+        f'<span class="rec-stat-label">Headroom</span>'
+        f'<span class="rec-stat-value">{rec.headroom:.0f}%</span>'
+        f"</div>"
+        f'<div class="rec-stat-item">'
+        f'<span class="rec-stat-label">n (both)</span>'
+        f'<span class="rec-stat-value">{rec.n_both:,}</span>'
+        f"</div>"
+        f"</div>"
+        f"</div>"
+        f'<div class="rec-quadrant-wrap">'
+        f"{_quadrant_html(rec)}"
+        f"</div>"
+        f"</div>"
+    )
 
 
 def render_recommendations(data: pd.DataFrame, kpi: str) -> None:
-    """Render the Phase 3 Recommendations tab."""
+    """Render the Phase 3 Recommendations tab with pair-based cards."""
     if data.empty:
         st.warning("No ads match the selected global filters.")
         return
-    recs = _cached_recommendations(data, kpi)
+
+    top_n = 3
+    recs = _cached_pair_recommendations(data, kpi, top_n)
     if not recs:
         st.info("Not enough data to generate recommendations.")
         return
 
-    do_more = [r for r in recs if r.action == "do_more"]
-    avoid = [r for r in recs if r.action == "avoid"]
+    kpi_upper = kpi.upper()
+    header_cols = st.columns([5, 1], vertical_alignment="center")
+    with header_cols[0]:
+        st.subheader(f"Your next {len(recs)} moves")
+    with header_cols[1]:
+        page_clicked = st.button(
+            "Inspect", key="explain_recs_page", width="stretch",
+        )
+    st.markdown(
+        f'<div class="rec-counter">'
+        f"Showing top {len(recs)} pair-based recommendations for {kpi_upper}. "
+        f"Each card pairs two creative levers and shows their combined effect."
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
-    left, right = st.columns(2)
-    with left:
-        st.subheader("Do More Of")
-        st.caption(f"Durable, significant drivers of {kpi}")
-        for rec in do_more:
-            color = lift_color(rec.lift)
-            hypothesis = escape(rec.hypothesis)
-            tag = escape(rec.durability_tag)
-            synergy_html = ""
-            if rec.synergy_partner and rec.synergy_score is not None:
-                partner = escape(rec.synergy_partner)
-                synergy_html = (
-                    f'<div class="rec-synergy">Synergy with '
-                    f"{partner}: "
-                    f"{rec.synergy_score:+.1f}%</div>"
-                )
+    focused_rec = None
+    for rank, rec in enumerate(recs, 1):
+        with st.container(key=f"rec_wrap_{rank}"):
             st.markdown(
-                f'<div class="rec-card do-more">'
-                f'<div class="rec-hypothesis">{hypothesis}</div>'
-                f'<div class="rec-evidence">'
-                f'<span class="rec-lift" style="color:{color}">'
-                f"+{rec.lift:.0f}%</span>"
-                f'<span class="rec-stat">p={rec.p_value:.4f}</span>'
-                f'<span class="rec-tag durable">{tag}</span>'
-                f'<span class="rec-n">n={rec.n:,}</span>'
-                f"</div>"
-                f"{synergy_html}"
-                f"</div>",
+                _rec_card_html(rec, rank, kpi),
                 unsafe_allow_html=True,
             )
-    with right:
-        st.subheader("Avoid")
-        st.caption(f"Durable, significant drains on {kpi}")
-        for rec in avoid:
-            color = lift_color(rec.lift)
-            hypothesis = escape(rec.hypothesis)
-            tag = escape(rec.durability_tag)
-            synergy_html = ""
-            if rec.synergy_partner and rec.synergy_score is not None:
-                partner = escape(rec.synergy_partner)
-                synergy_html = (
-                    f'<div class="rec-synergy">Synergy with '
-                    f"{partner}: "
-                    f"{rec.synergy_score:+.1f}%</div>"
-                )
-            st.markdown(
-                f'<div class="rec-card avoid">'
-                f'<div class="rec-hypothesis">{hypothesis}</div>'
-                f'<div class="rec-evidence">'
-                f'<span class="rec-lift" style="color:{color}">'
-                f"{rec.lift:.0f}%</span>"
-                f'<span class="rec-stat">p={rec.p_value:.4f}</span>'
-                f'<span class="rec-tag durable">{tag}</span>'
-                f'<span class="rec-n">n={rec.n:,}</span>'
-                f"</div>"
-                f"{synergy_html}"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+            if st.button(":material/open_in_new:", key=f"explain_rec_{rank}"):
+                focused_rec = rec
+
+    if focused_rec is None and not page_clicked:
+        return
+
+    focus_id = pair_rec_id(focused_rec) if focused_rec is not None else None
+    insight_groups, _ = _analyze_insights(
+        data, kpi, st.session_state.get("active_top_n", 30),
+    )
+    context = build_context(
+        page="Recommendations",
+        kpi=kpi,
+        dataset_name=st.session_state.get("dataset_name", ""),
+        n_ads_in_view=len(data),
+        n_ads_total=len(st.session_state["dataset"]),
+        filters=_active_filter_summary(),
+        insight_groups=insight_groups,
+        pair_recs=recs,
+        focus_id=focus_id,
+    )
+    if focused_rec is not None:
+        rec = focused_rec
+        lift_sign = "+" if rec.combined_lift > 0 else ""
+        syn_sign = "+" if rec.synergy_score > 0 else ""
+        open_explain(
+            target=focus_id,
+            context=context,
+            seed_question=SEED_FOCUS,
+            title=rec.title.capitalize(),
+            chips=[
+                ("Combined lift", f"{lift_sign}{rec.combined_lift:.0f}%",
+                 lift_color(rec.combined_lift)),
+                ("Synergy", f"{syn_sign}{rec.synergy_score:.1f}%",
+                 lift_color(rec.synergy_score)),
+                ("Headroom", f"{rec.headroom:.0f}%", None),
+                ("n (both)", f"{rec.n_both:,}", None),
+            ],
+        )
+    else:
+        open_explain(
+            target="recs_page",
+            context=context,
+            seed_question=SEED_PAGE,
+            title=f"Your next {len(recs)} moves",
+            chips=[
+                ("KPI", kpi_upper, None),
+                ("Plays", str(len(recs)), None),
+                ("Ads in view", f"{len(data):,}", None),
+            ],
+        )
 
 
 def render_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
@@ -640,35 +877,36 @@ def render_details(data: pd.DataFrame, kpi: str, top_n: int) -> None:
 
 def render_loaded_state(data: pd.DataFrame) -> None:
     """Render the loaded-file header and global controls."""
-    header, action = st.columns([5, 1])
-    with header:
-        st.title("Ads Creative Component Performance")
-        st.caption(f"Loaded: {st.session_state['dataset_name']}")
-    with action:
-        st.write("")
+    with st.sidebar:
+        st.title("DAC")
+        st.caption(f"{st.session_state['dataset_name']}")
+        page = st.radio(
+            "Navigation",
+            ("Overview", "Details", "Insights", "Recommendations"),
+            label_visibility="collapsed",
+            key="sidebar_page",
+        )
+        st.divider()
         st.button(
             "Unload dataset",
             on_click=unload_dataset,
             width="stretch",
         )
 
+    st.title(page)
     filtered = render_global_controls(data)
     st.caption(f"{len(filtered):,} of {len(data):,} ads in view")
-    overview, details, insights_tab, recommendations_tab = st.tabs(
-        ("Overview", "Details", "Insights", "Recommendations"),
-    )
-    with overview:
-        render_overview(filtered, st.session_state["active_kpi"])
-    with details:
-        render_details(
-            filtered,
-            st.session_state["active_kpi"],
-            st.session_state["active_top_n"],
-        )
-    with insights_tab:
-        render_insights(filtered, st.session_state["active_kpi"])
-    with recommendations_tab:
-        render_recommendations(filtered, st.session_state["active_kpi"])
+
+    kpi = st.session_state["active_kpi"]
+    top_n = st.session_state["active_top_n"]
+    if page == "Overview":
+        render_overview(filtered, kpi)
+    elif page == "Details":
+        render_details(filtered, kpi, top_n)
+    elif page == "Insights":
+        render_insights(filtered, kpi)
+    else:
+        render_recommendations(filtered, kpi)
 
 
 def main() -> None:

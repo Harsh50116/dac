@@ -28,6 +28,9 @@ NUMERIC_COLUMNS = (
     "clicks",
     "purchases",
 )
+EXPECTED_MEDIA_TYPES = {"image", "video"}
+EXPECTED_ASPECT_RATIOS = {"1:1", "4:5", "9:16"}
+MIN_ROW_COUNT = 100
 
 
 class DataValidationError(ValueError):
@@ -105,6 +108,24 @@ def normalize_dataset(frame: pd.DataFrame) -> pd.DataFrame:
 
     if data["ad_id"].duplicated().any():
         raise DataValidationError("Column 'ad_id' must contain unique values.")
+
+    unexpected_media = set(data["media_type"].unique()) - EXPECTED_MEDIA_TYPES
+    if unexpected_media:
+        raise DataValidationError(
+            f"Unexpected media_type values: {', '.join(sorted(unexpected_media))}. "
+            f"Expected: {', '.join(sorted(EXPECTED_MEDIA_TYPES))}."
+        )
+    unexpected_aspect = set(data["aspect_ratio"].unique()) - EXPECTED_ASPECT_RATIOS
+    if unexpected_aspect:
+        raise DataValidationError(
+            f"Unexpected aspect_ratio values: {', '.join(sorted(unexpected_aspect))}. "
+            f"Expected: {', '.join(sorted(EXPECTED_ASPECT_RATIOS))}."
+        )
+    if len(data) < MIN_ROW_COUNT:
+        raise DataValidationError(
+            f"Dataset has only {len(data):,} rows. "
+            f"At least {MIN_ROW_COUNT:,} rows are needed for meaningful analysis."
+        )
 
     parsed_labels = data["labels"].map(parse_labels)
     data["label_pairs"] = parsed_labels
