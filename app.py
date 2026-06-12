@@ -86,6 +86,13 @@ def reset_filters(months: pd.DatetimeIndex) -> None:
     st.session_state["filter_top_n"] = 30
 
 
+@st.cache_data
+def _sample_preview(path_str: str) -> tuple[pd.DataFrame, int]:
+    """First rows of a sample dataset, as they appear in the file."""
+    frame = pd.read_csv(path_str)
+    return frame.head(50), len(frame)
+
+
 def render_upload_state() -> None:
     """Render the initial upload and sample-data actions."""
     st.title("Ads Creative Component Performance")
@@ -121,6 +128,19 @@ def render_upload_state() -> None:
                 on_click=_make_loader(path),
                 use_container_width=True,
             )
+
+    with st.expander("Preview sample datasets"):
+        tabs = st.tabs(
+            [f"Sample dataset {n}" for n in range(1, len(SAMPLE_DATASETS) + 1)]
+        )
+        for tab, (label, path) in zip(tabs, SAMPLE_DATASETS):
+            with tab:
+                preview, total = _sample_preview(str(path))
+                st.caption(
+                    f"{path.name} · showing first {len(preview)} "
+                    f"of {total:,} rows"
+                )
+                st.dataframe(preview, width="stretch", hide_index=True)
 
 
 def render_global_controls(data: pd.DataFrame) -> pd.DataFrame:

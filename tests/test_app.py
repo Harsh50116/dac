@@ -11,7 +11,7 @@ APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 
 class AppStateTests(unittest.TestCase):
     def setUp(self):
-        self.app = AppTest.from_file(APP_PATH).run()
+        self.app = AppTest.from_file(APP_PATH, default_timeout=30).run()
 
     def test_app_starts_in_upload_state(self):
         self.assertEqual(len(self.app.exception), 0)
@@ -22,6 +22,17 @@ class AppStateTests(unittest.TestCase):
         self.assertEqual(
             self.app.button[0].label,
             "Load sample dataset 1",
+        )
+
+    def test_upload_state_previews_all_sample_datasets(self):
+        self.assertEqual(len(self.app.exception), 0)
+        previews = self.app.dataframe
+        self.assertEqual(len(previews), 3)
+        for preview in previews:
+            self.assertEqual(len(preview.value), 50)
+            self.assertIn("ad_id", preview.value.columns)
+        self.assertTrue(
+            any("showing first 50" in c.value for c in self.app.caption)
         )
 
     def test_sample_data_loads_global_controls(self):
