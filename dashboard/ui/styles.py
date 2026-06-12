@@ -355,25 +355,6 @@ h3 {
   margin-bottom: 0.45rem;
 }
 
-.rec-action-tag {
-  padding: 0.15rem 0.5rem;
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border-radius: 5px;
-}
-
-.rec-action-tag.do-more {
-  color: #34c77b;
-  background: rgba(52, 199, 123, 0.14);
-}
-
-.rec-action-tag.stop {
-  color: #e5533f;
-  background: rgba(229, 83, 63, 0.14);
-}
-
 .rec-priority {
   color: var(--dac-muted);
   font-size: 0.72rem;
@@ -381,7 +362,6 @@ h3 {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-
 .rec-title {
   color: var(--dac-text);
   font-size: 1.12rem;
@@ -549,8 +529,18 @@ div[data-testid="stDialog"] div[role="dialog"] {
 /* Shrink the conversation on short viewports so the header, chips, and
    chat input always fit inside the drawer (overrides the inline 500px). */
 div[data-testid="stDialog"] .st-key-explain_conversation {
-  height: min(500px, calc(100vh - 22rem)) !important;
-  min-height: 180px;
+  height: min(500px, calc(100vh - 25rem)) !important;
+  min-height: 140px;
+}
+
+/* Keep the chat input visible at the drawer's bottom even when the
+   content above it outgrows the viewport. */
+div[data-testid="stDialog"] [data-testid="stElementContainer"]:has([data-testid="stChatInput"]) {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--dac-surface);
+  padding: 0.4rem 0 0.2rem;
 }
 
 .explain-disclaimer {
