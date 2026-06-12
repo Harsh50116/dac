@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import requests
 
-from dashboard import llm_client
-from dashboard.llm_client import FALLBACK_TEXT, LLMResponse, ask
+from dashboard.llm import client as llm_client
+from dashboard.llm.client import FALLBACK_TEXT, LLMResponse, ask
 
 
 CONTEXT = {"kpi": "ROAS", "items": [], "focus_id": None}

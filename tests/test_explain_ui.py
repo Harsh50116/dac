@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
-from dashboard.llm_client import LLMResponse
+from dashboard.llm.client import LLMResponse
 
 
 APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
@@ -39,7 +39,7 @@ class ExplainConversationTests(unittest.TestCase):
     def test_clicking_explain_seeds_grounded_conversation(self):
         app = loaded_app("Recommendations")
         with patch(
-            "dashboard.explain_panel.ask",
+            "dashboard.llm.explain_panel.ask",
             return_value=LLMResponse(text="Image creative leads here.", ok=True),
         ):
             app.button(key="explain_rec_1").click().run()
@@ -53,7 +53,7 @@ class ExplainConversationTests(unittest.TestCase):
     def test_unverified_numbers_are_flagged(self):
         app = loaded_app("Recommendations")
         with patch(
-            "dashboard.explain_panel.ask",
+            "dashboard.llm.explain_panel.ask",
             return_value=LLMResponse(text="Expect a 9,999% lift.", ok=True),
         ):
             app.button(key="explain_rec_1").click().run()
@@ -63,10 +63,10 @@ class ExplainConversationTests(unittest.TestCase):
 
     def test_failed_seed_is_not_persisted_and_reopen_retries(self):
         app = loaded_app("Recommendations")
-        from dashboard.llm_client import FALLBACK_TEXT
+        from dashboard.llm.client import FALLBACK_TEXT
 
         with patch(
-            "dashboard.explain_panel.ask",
+            "dashboard.llm.explain_panel.ask",
             return_value=LLMResponse(text=FALLBACK_TEXT, ok=False),
         ):
             app.button(key="explain_recs_page").click().run()
@@ -74,7 +74,7 @@ class ExplainConversationTests(unittest.TestCase):
         self.assertEqual(app.session_state["explain_messages"], [])
 
         with patch(
-            "dashboard.explain_panel.ask",
+            "dashboard.llm.explain_panel.ask",
             return_value=LLMResponse(text="Now it works.", ok=True),
         ):
             app.button(key="explain_recs_page").click().run()

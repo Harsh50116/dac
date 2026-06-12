@@ -3,7 +3,7 @@
 import unittest
 from pathlib import Path
 
-from dashboard.analytics import (
+from dashboard.analytics.core import (
     binary_lift_table,
     categorical_lift_table,
     label_table,
@@ -11,7 +11,7 @@ from dashboard.analytics import (
     monthly_performance,
     rolling_label_lift,
 )
-from dashboard.charts import (
+from dashboard.ui.charts import (
     circular_lift_chart,
     label_performance_chart,
     lift_bar_chart,

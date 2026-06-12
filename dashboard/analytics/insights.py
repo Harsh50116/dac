@@ -10,8 +10,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from dashboard.interactions import attribute_mask
-from dashboard.lift_engine import LiftResult, scan_all
+from dashboard.analytics.interactions import attribute_mask
+from dashboard.analytics.lift_engine import LiftResult, scan_all
 
 
 JACCARD_DEDUP_THRESHOLD = 0.95

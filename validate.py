@@ -4,7 +4,7 @@ import sys
 import numpy as np
 import pandas as pd
 from generate import EFFECTS_CONFIG, EMOJI_POOL
-from dashboard.lift_engine import compute_lift as _engine_lift
+from dashboard.analytics.lift_engine import compute_lift as _engine_lift
 
 DEMO_TARGETS = {
     "n_ads": 2650,

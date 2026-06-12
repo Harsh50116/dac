@@ -2,7 +2,7 @@
 
 import unittest
 
-from dashboard.llm_validate import unverified_numbers
+from dashboard.llm.validate import unverified_numbers
 
 
 CONTEXT = {

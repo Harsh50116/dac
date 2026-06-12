@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from dashboard.data import load_dataset
-from dashboard.interactions import (
+from dashboard.analytics.interactions import (
     DEFAULT_MIN_N,
     Interaction,
     attribute_mask,

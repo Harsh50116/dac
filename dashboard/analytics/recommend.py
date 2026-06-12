@@ -10,10 +10,10 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from dashboard.insights import _phrase_for_key, generate_insights
-from dashboard.interactions import attribute_mask, find_interactions
-from dashboard.lift_engine import kpi_series, scan_all
-from dashboard.significance_decay import (
+from dashboard.analytics.insights import _phrase_for_key, generate_insights
+from dashboard.analytics.interactions import attribute_mask, find_interactions
+from dashboard.analytics.lift_engine import kpi_series, scan_all
+from dashboard.analytics.significance_decay import (
     SIGNIFICANCE_P_THRESHOLD,
     durability_for_mask,
     significance_for_mask,

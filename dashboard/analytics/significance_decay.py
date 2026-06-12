@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from dashboard.lift_engine import compute_lift, kpi_series
+from dashboard.analytics.lift_engine import compute_lift, kpi_series
 
 
 SIGNIFICANCE_P_THRESHOLD = 0.05
