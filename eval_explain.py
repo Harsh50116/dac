@@ -18,11 +18,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from dashboard.data import load_dataset
-from dashboard.insights import generate_insights, group_by_category
-from dashboard.llm_client import ask
-from dashboard.llm_context import build_context
-from dashboard.llm_validate import unverified_numbers
-from dashboard.recommend import generate_pair_recommendations
+from dashboard.analytics.insights import generate_insights, group_by_category
+from dashboard.llm.client import ask
+from dashboard.llm.context import build_context
+from dashboard.llm.validate import unverified_numbers
+from dashboard.analytics.recommend import generate_pair_recommendations
 
 
 DATASET = (

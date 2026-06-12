@@ -3,8 +3,8 @@
 import json
 import unittest
 
-from dashboard.insights import Insight
-from dashboard.llm_context import (
+from dashboard.analytics.insights import Insight
+from dashboard.llm.context import (
     build_context,
     context_fingerprint,
     insight_id,
@@ -12,7 +12,7 @@ from dashboard.llm_context import (
     pair_rec_id,
     pair_rec_item,
 )
-from dashboard.recommend import PairRecommendation
+from dashboard.analytics.recommend import PairRecommendation
 
 
 def make_insight(key="media_type=image", lift=42.0, n=900, confidence="high"):

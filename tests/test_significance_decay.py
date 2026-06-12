@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from dashboard.data import load_dataset
-from dashboard.significance_decay import (
+from dashboard.analytics.significance_decay import (
     MIN_QUARTERS,
     DurabilityResult,
     SignificanceResult,

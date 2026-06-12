@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from dashboard.analytics import (
+from dashboard.analytics.core import (
     KPI_NAMES,
     binary_lift_table,
     categorical_lift_table,
@@ -19,7 +19,7 @@ from dashboard.analytics import (
     rolling_label_lift,
     rows_with_labels,
 )
-from dashboard.charts import (
+from dashboard.ui.charts import (
     circular_lift_chart,
     label_performance_chart,
     lift_bar_chart,
@@ -28,14 +28,14 @@ from dashboard.charts import (
     volume_performance_chart,
     word_cloud_chart,
 )
-from dashboard.explain_panel import SEED_FOCUS, SEED_PAGE, open_explain
-from dashboard.insights import generate_insights, group_by_category
-from dashboard.interactions import attribute_mask
-from dashboard.llm_context import build_context, pair_rec_id
-from dashboard.recommend import generate_pair_recommendations
+from dashboard.llm.explain_panel import SEED_FOCUS, SEED_PAGE, open_explain
+from dashboard.analytics.insights import generate_insights, group_by_category
+from dashboard.analytics.interactions import attribute_mask
+from dashboard.llm.context import build_context, pair_rec_id
+from dashboard.analytics.recommend import generate_pair_recommendations
 from dashboard.data import DataValidationError, calendar_months, load_dataset
-from dashboard.significance_decay import significance_for_mask
-from dashboard.styles import apply_styles
+from dashboard.analytics.significance_decay import significance_for_mask
+from dashboard.ui.styles import apply_styles
 
 
 _DATA_DIR = Path(__file__).parent / "data"

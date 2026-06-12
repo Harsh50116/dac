@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from dashboard.data import load_dataset
-from dashboard.insights import (
+from dashboard.analytics.insights import (
     Insight,
     _build_statement,
     _confidence,

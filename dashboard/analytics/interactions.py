@@ -10,7 +10,7 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 
-from dashboard.lift_engine import compute_lift, kpi_series, scan_all
+from dashboard.analytics.lift_engine import compute_lift, kpi_series, scan_all
 
 
 DEFAULT_MIN_N = 50

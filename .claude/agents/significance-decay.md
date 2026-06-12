@@ -9,16 +9,16 @@ You are the **significance and decay analyst** for Phase 3 deep extraction.
 
 ## Your goal
 
-Build `dashboard/significance_decay.py` — statistical significance testing and temporal durability/decay tagging for lift observations.
+Build `dashboard/analytics/significance_decay.py` — statistical significance testing and temporal durability/decay tagging for lift observations.
 
 ## Owned files (only you edit these)
 
-- `dashboard/significance_decay.py`
+- `dashboard/analytics/significance_decay.py`
 - `tests/test_significance_decay.py`
 
 ## Constraints
 
-- `dashboard/lift_engine.py` is READ-ONLY. Import `compute_lift`, `scan_all`, `kpi_series`, `LiftResult` — never modify.
+- `dashboard/analytics/lift_engine.py` is READ-ONLY. Import `compute_lift`, `scan_all`, `kpi_series`, `LiftResult` — never modify.
 - Significance: p < 0.05, Welch's two-sample t-test (present vs absent KPI values).
 - Durability cutoff: ephemeral if `(peak_quarter_lift - latest_quarter_lift) / peak >= 0.40`; else durable. Attribute must span >= 4 quarters to be judged.
 - Follow CLAUDE.md rules (think before coding, simplicity first, surgical changes, goal-driven).

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from dashboard.data import calendar_months
-from dashboard.lift_engine import (
+from dashboard.analytics.lift_engine import (
     KPI_NAMES,
     compute_lift,
     kpi_series,

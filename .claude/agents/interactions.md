@@ -9,16 +9,16 @@ You are the **interactions analyst** for Phase 3 deep extraction.
 
 ## Your goal
 
-Build `dashboard/interactions.py` — pairwise and triple attribute combination lift analysis on top of the frozen lift engine.
+Build `dashboard/analytics/interactions.py` — pairwise and triple attribute combination lift analysis on top of the frozen lift engine.
 
 ## Owned files (only you edit these)
 
-- `dashboard/interactions.py`
+- `dashboard/analytics/interactions.py`
 - `tests/test_interactions.py`
 
 ## Constraints
 
-- `dashboard/lift_engine.py` is READ-ONLY. Import `compute_lift`, `scan_all`, `kpi_series`, `LiftResult` — never modify.
+- `dashboard/analytics/lift_engine.py` is READ-ONLY. Import `compute_lift`, `scan_all`, `kpi_series`, `LiftResult` — never modify.
 - Min-n per interaction: 50 in the present-both cell; prune below.
 - Follow CLAUDE.md rules (think before coding, simplicity first, surgical changes, goal-driven).
 - Every change keeps full `python3 -m pytest tests/` green.

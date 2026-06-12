@@ -10,8 +10,8 @@ import hashlib
 import json
 import re
 
-from dashboard.insights import Insight
-from dashboard.recommend import PairRecommendation
+from dashboard.analytics.insights import Insight
+from dashboard.analytics.recommend import PairRecommendation
 
 
 # Plain-language definitions of every metric that appears in context

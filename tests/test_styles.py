@@ -3,7 +3,7 @@
 import unittest
 from pathlib import Path
 
-from dashboard.styles import APP_CSS
+from dashboard.ui.styles import APP_CSS
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

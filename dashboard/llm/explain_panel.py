@@ -11,9 +11,9 @@ from html import escape
 
 import streamlit as st
 
-from dashboard.llm_client import ask
-from dashboard.llm_context import context_fingerprint
-from dashboard.llm_validate import unverified_numbers
+from dashboard.llm.client import ask
+from dashboard.llm.context import context_fingerprint
+from dashboard.llm.validate import unverified_numbers
 
 
 DISCLAIMER = (

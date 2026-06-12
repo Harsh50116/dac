@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from dashboard.analytics import (
+from dashboard.analytics.core import (
     aggregate_kpi,
     binary_lift_table,
     categorical_lift_table,

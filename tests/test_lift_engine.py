@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from dashboard.data import load_dataset
-from dashboard.lift_engine import (
+from dashboard.analytics.lift_engine import (
     KPI_NAMES,
     LiftResult,
     compute_lift,
@@ -104,7 +104,7 @@ class ComputeLiftTests(unittest.TestCase):
         self.assertEqual(result.n_absent, 0)
 
     def test_matches_existing_analytics_lift(self):
-        from dashboard.analytics import lift
+        from dashboard.analytics.core import lift
 
         for kpi in KPI_NAMES:
             for col in ("headline_has_numbers", "body_has_emoji", "body_over_50"):

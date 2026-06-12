@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from dashboard.data import load_dataset
-from dashboard.recommend import Recommendation, generate_recommendations
+from dashboard.analytics.recommend import Recommendation, generate_recommendations
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
