@@ -65,6 +65,25 @@ data/ads-monthly_v1_2026-06-06_2023-01_2025-01.csv
 - CPP lift is direction-adjusted so positive values always mean better results
 - Missing calendar months remain visible in time-series results
 
+## Evidence tiers
+
+Not every number in the dashboard carries the same weight. Three tiers,
+from strongest to weakest:
+
+- **Tested** — Label insights on the Insights page. Each label must pass
+  Welch's t-test (p < 0.05) against attribute-absent ads and have n ≥ 150
+  before it is shown.
+- **Directional** — Format, Aspect Ratio, and Ad Copy insights. Ranked
+  associations with sample-size tiers only; no statistical test. Levers
+  with n < 200 are additionally flagged "thin".
+- **Exploratory** — pair recommendations on the Recommendations page.
+  Minimum sample-size checks only: no significance test, no multiple-
+  comparison correction, no durability check. Treat them as testable
+  hypotheses for the next campaign, not conclusions.
+
+The Explain panel receives this metadata with every item and answers
+questions about reliability truthfully from it.
+
 ## Verification
 
 ```bash
@@ -78,5 +97,3 @@ calls, requires `HYPERBOLIC_KEY`):
 ```bash
 python3 eval_explain.py
 ```
-
-The implementation follows the constraints in `CLAUDE.md`.

@@ -74,6 +74,18 @@ class AppStateTests(unittest.TestCase):
         self.assertIn("of 2,650 ads in view", view_caption)
         self.assertNotIn("2,650 of 2,650", view_caption)
 
+    def test_recommendations_page_states_exploratory_evidence(self):
+        self.app.button[0].click().run()
+        self.app.radio(key="sidebar_page").set_value("Recommendations").run()
+
+        self.assertEqual(len(self.app.exception), 0)
+        self.assertTrue(
+            any(
+                "Pair plays are exploratory" in m.value
+                for m in self.app.markdown
+            )
+        )
+
     def test_unload_returns_to_upload_state(self):
         self.app.button[0].click().run()
         unload = next(

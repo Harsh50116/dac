@@ -355,25 +355,6 @@ h3 {
   margin-bottom: 0.45rem;
 }
 
-.rec-action-tag {
-  padding: 0.15rem 0.5rem;
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border-radius: 5px;
-}
-
-.rec-action-tag.do-more {
-  color: #34c77b;
-  background: rgba(52, 199, 123, 0.14);
-}
-
-.rec-action-tag.stop {
-  color: #e5533f;
-  background: rgba(229, 83, 63, 0.14);
-}
-
 .rec-priority {
   color: var(--dac-muted);
   font-size: 0.72rem;
@@ -381,7 +362,6 @@ h3 {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-
 .rec-title {
   color: var(--dac-text);
   font-size: 1.12rem;

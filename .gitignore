@@ -17,3 +17,5 @@ venv/
 .DS_Store
 
 .env
+# Internal AI-session tooling
+.claude/

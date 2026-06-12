@@ -751,7 +751,6 @@ def _rgb_from_lift(value: float) -> str:
 def _rec_card_html(rec, rank: int, kpi: str) -> str:
     """Render one full-width recommendation card."""
     action_cls = rec.action.replace("_", "-")
-    action_label = "DO MORE OF" if rec.action == "do_more" else "STOP"
     ordinals = {1: "1st", 2: "2nd", 3: "3rd"}
     priority = ordinals.get(rank, f"{rank}th")
 
@@ -764,7 +763,6 @@ def _rec_card_html(rec, rank: int, kpi: str) -> str:
         f'<div class="rec-card {action_cls}">'
         f'<div class="rec-body">'
         f'<div class="rec-header">'
-        f'<span class="rec-action-tag {action_cls}">{action_label}</span>'
         f'<span class="rec-priority">{priority} priority</span>'
         f"</div>"
         f'<div class="rec-title">{escape(rec.title.capitalize())}</div>'
@@ -820,7 +818,9 @@ def render_recommendations(data: pd.DataFrame, kpi: str) -> None:
     st.markdown(
         f'<div class="rec-counter">'
         f"Showing top {len(recs)} pair-based recommendations for {kpi_upper}. "
-        f"Each card pairs two creative levers and shows their combined effect."
+        f"Each card pairs two creative levers and shows their combined effect. "
+        f"Pair plays are exploratory: ranked by observed lift with minimum "
+        f"sample-size checks, not statistically tested like Label insights."
         f"</div>",
         unsafe_allow_html=True,
     )
