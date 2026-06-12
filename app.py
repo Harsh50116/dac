@@ -589,7 +589,7 @@ def render_insights(data: pd.DataFrame, kpi: str) -> None:
         st.subheader(f"What moves {kpi_upper}")
     with header_cols[1]:
         page_clicked = st.button(
-            "Explain", key="explain_insights_page", width="stretch",
+            "Inspect", key="explain_insights_page", width="stretch",
         )
     st.caption(
         f"Every creative lever ranked by its effect on {kpi_upper} versus "
@@ -624,7 +624,7 @@ def render_insights(data: pd.DataFrame, kpi: str) -> None:
         slug = section_slugs[category]
         with st.container(key=f"insight_sec_{slug}"):
             st.markdown(html, unsafe_allow_html=True)
-            if st.button("Explain", key=f"explain_sec_{slug}"):
+            if st.button(":material/open_in_new:", key=f"explain_sec_{slug}"):
                 focused_section = category
 
     st.markdown(
@@ -795,7 +795,7 @@ def render_recommendations(data: pd.DataFrame, kpi: str) -> None:
         st.subheader(f"Your next {len(recs)} moves")
     with header_cols[1]:
         page_clicked = st.button(
-            "Explain", key="explain_recs_page", width="stretch",
+            "Inspect", key="explain_recs_page", width="stretch",
         )
     st.markdown(
         f'<div class="rec-counter">'
@@ -812,7 +812,7 @@ def render_recommendations(data: pd.DataFrame, kpi: str) -> None:
                 _rec_card_html(rec, rank, kpi),
                 unsafe_allow_html=True,
             )
-            if st.button("Explain", key=f"explain_rec_{rank}"):
+            if st.button(":material/open_in_new:", key=f"explain_rec_{rank}"):
                 focused_rec = rec
 
     if focused_rec is None and not page_clicked:

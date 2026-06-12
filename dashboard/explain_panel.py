@@ -34,6 +34,23 @@ UNVERIFIED_NOTE = (
 )
 
 
+def _letter_avatar(letter: str, color: str, background: str) -> str:
+    """Inline SVG letter avatar for chat messages."""
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+        f'<rect width="32" height="32" rx="8" fill="{background}"/>'
+        '<text x="16" y="21" text-anchor="middle" '
+        'font-family="Arial, sans-serif" font-size="15" font-weight="700" '
+        f'fill="{color}">{letter}</text></svg>'
+    )
+
+
+AVATARS = {
+    "assistant": _letter_avatar("D", "#5b8cff", "#1b2438"),
+    "user": _letter_avatar("H", "#e7e9ee", "#22262e"),
+}
+
+
 def open_explain(
     *,
     target: str,
@@ -87,20 +104,24 @@ def _explain_dialog(
 
     # All turns render into this fixed-height scrollable container so
     # they always appear above the chat input and long conversations
-    # scroll inside the drawer instead of overflowing it.
-    conversation = st.container(height=500)
+    # scroll inside the drawer instead of overflowing it. The key lets
+    # the CSS shrink it on short viewports.
+    # The st.empty() slot wipes the previous run's conversation from the
+    # screen as soon as the dialog paints — otherwise a target switch
+    # would keep showing the old chat while the seed fetch blocks.
+    conversation = st.empty().container(height=500, key="explain_conversation")
     with conversation:
         if not messages:
             seed_answer = _send(seed_question, context, messages, seed=True)
             if not messages:
                 # Failed seed isn't persisted, so reopening retries it.
-                with st.chat_message("assistant"):
+                with st.chat_message("assistant", avatar=AVATARS["assistant"]):
                     st.markdown(seed_answer["content"])
 
         for message in messages:
             if message.get("seed"):
                 continue
-            with st.chat_message(message["role"]):
+            with st.chat_message(message["role"], avatar=AVATARS[message["role"]]):
                 st.markdown(message["content"])
                 if message.get("caveat"):
                     st.caption(message["caveat"])
@@ -108,10 +129,10 @@ def _explain_dialog(
     prompt = st.chat_input("Ask about a number on this page")
     if prompt:
         with conversation:
-            with st.chat_message("user"):
+            with st.chat_message("user", avatar=AVATARS["user"]):
                 st.markdown(prompt)
             answer = _send(prompt, context, messages)
-            with st.chat_message("assistant"):
+            with st.chat_message("assistant", avatar=AVATARS["assistant"]):
                 st.markdown(answer["content"])
                 if answer.get("caveat"):
                     st.caption(answer["caveat"])

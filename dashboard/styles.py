@@ -521,6 +521,18 @@ hr {
 
 /* ---- Explain panel (right-side drawer) ---- */
 
+/* The backdrop scrolls by default when the dialog outgrows the viewport,
+   which drags the 100vh drawer out of alignment — pin it shut. */
+div[data-testid="stDialog"] {
+  overflow: hidden !important;
+}
+
+/* The modal container's top padding pushes the 100vh drawer past the
+   viewport, making the backdrop scrollable even with short content. */
+div[data-testid="stDialog"] > div {
+  padding-top: 0 !important;
+}
+
 div[data-testid="stDialog"] div[role="dialog"] {
   width: 75vw !important;
   max-width: 75vw !important;
@@ -531,6 +543,14 @@ div[data-testid="stDialog"] div[role="dialog"] {
   background: var(--dac-surface);
   border: 1px solid var(--dac-border);
   border-right: none;
+  overflow-y: auto;
+}
+
+/* Shrink the conversation on short viewports so the header, chips, and
+   chat input always fit inside the drawer (overrides the inline 500px). */
+div[data-testid="stDialog"] .st-key-explain_conversation {
+  height: min(500px, calc(100vh - 22rem)) !important;
+  min-height: 180px;
 }
 
 .explain-disclaimer {
@@ -581,8 +601,8 @@ div[data-testid="stDialog"] div[role="dialog"] {
 
 [data-testid="stChatInput"] textarea {
   background: transparent;
+  font-size: 1rem;
 }
-
 /* Explain buttons overlaid on the top-right of cards and sections */
 
 [class*="st-key-rec_wrap_"],
@@ -609,7 +629,7 @@ div[data-testid="stDialog"] div[role="dialog"] {
 [class*="st-key-rec_wrap_"] .stButton button,
 [class*="st-key-insight_sec_"] .stButton button {
   font-size: 0.8rem;
-  padding: 0.1rem 0.85rem;
+  padding: 0.1rem 0.45rem;
   min-height: 1.7rem;
   background: rgba(91, 140, 255, 0.1);
   border: 1px solid rgba(91, 140, 255, 0.35);
